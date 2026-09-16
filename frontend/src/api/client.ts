@@ -1,8 +1,7 @@
+import { HttpClient } from "./http-client";
 import type { Box, Calibration, CalibrationRequest, Component, InventoryEvent, Locker } from "./types";
 
-export class ApiClient {
-  constructor(private readonly baseUrl: string) {}
-
+export class ApiClient extends HttpClient {
   boxes(): Promise<Box[]> {
     return this.get("/api/boxes");
   }
@@ -33,41 +32,5 @@ export class ApiClient {
 
   releaseComponent(nfcId: string): Promise<void> {
     return this.send(`/api/components/${encodeURIComponent(nfcId)}`, "DELETE");
-  }
-
-  private async get<T>(path: string): Promise<T> {
-    const response = await fetch(`${this.baseUrl}${path}`, { cache: "no-store" });
-    if (!response.ok) {
-      throw new Error(`${path}: HTTP ${response.status}`);
-    }
-    return (await response.json()) as T;
-  }
-
-  /** Domain errors come back as {"detail": "..."} and are shown to the user as is. */
-  private async send<T>(path: string, method: string, body?: unknown): Promise<T> {
-    const response = await fetch(`${this.baseUrl}${path}`, {
-      method,
-      headers: body === undefined ? undefined : { "Content-Type": "application/json" },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
-    if (!response.ok) {
-      throw new Error(await this.failure(response));
-    }
-    return (response.status === 204 ? null : await response.json()) as T;
-  }
-
-  private async failure(response: Response): Promise<string> {
-    try {
-      const payload = (await response.json()) as { detail?: unknown };
-      if (typeof payload.detail === "string") {
-        return payload.detail;
-      }
-      if (Array.isArray(payload.detail)) {
-        return payload.detail.map((item) => (item as { msg?: string }).msg ?? String(item)).join("; ");
-      }
-    } catch {
-      // Non-JSON error body: the status code is all we have.
-    }
-    return `HTTP ${response.status}`;
   }
 }

@@ -2,6 +2,8 @@ import { load } from "js-yaml";
 
 export interface AppConfig {
   apiBaseUrl: string;
+  /** Empty string hides the emulator tab: with real boxes there is nothing to emulate. */
+  emulatorBaseUrl: string;
   refreshIntervalMs: number;
   eventsLimit: number;
   calibrationsLimit: number;
@@ -16,6 +18,7 @@ export class ConfigLoader {
     const raw = (load(await response.text()) ?? {}) as Record<string, unknown>;
     return {
       apiBaseUrl: this.string(raw, "api_base_url", ""),
+      emulatorBaseUrl: this.string(raw, "emulator_base_url", ""),
       refreshIntervalMs: this.positive(raw, "refresh_interval_ms", 1000),
       eventsLimit: this.positive(raw, "events_limit", 200),
       calibrationsLimit: this.positive(raw, "calibrations_limit", 20),
