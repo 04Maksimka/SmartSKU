@@ -3,6 +3,8 @@
 Умные ящики для учёта мелкого крепежа: тензодатчик + NFC в каждой ячейке, ESP32 в каждом боксе, бэкенд ведёт учёт.
 Идея и требования — в `CLAUDE.md`.
 
+[Основная табличка с нужными вещами.](https://docs.google.com/spreadsheets/d/1SoUDmIfM1n-rBG37zFCyyzTNkSoC23q8NhGscTcgeVo/edit?usp=sharing)
+
 ## Текущий этап
 
 **Сделано (этап 1: backend core + эмулятор ESP):**
