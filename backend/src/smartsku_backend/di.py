@@ -9,6 +9,7 @@ from smartsku_backend.messaging.publisher import CommandPublisher, MqttConnectio
 from smartsku_backend.messaging.topics import MqttTopics
 from smartsku_backend.services.box_status import BoxStatusService
 from smartsku_backend.services.calibration import CalibrationService
+from smartsku_backend.services.deletion import DeletionService
 from smartsku_backend.services.indicators import IndicatorPolicy
 from smartsku_backend.services.inventory import ComponentService, InventoryQueryService
 from smartsku_backend.services.provisioning import ProvisioningService
@@ -55,6 +56,7 @@ class ServicesProvider(Provider):
         BoxStatusService,
         ProvisioningService,
         CalibrationService,
+        DeletionService,
         TareService,
         InventoryQueryService,
         ComponentService,

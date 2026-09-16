@@ -6,6 +6,8 @@ import type { CommandService } from "../app/command-service";
 import {
   DashboardEvents,
   type CancelCalibrationRequest,
+  type DeleteBoxRequest,
+  type DeleteLockerRequest,
   type ReleaseComponentRequest,
   type TareRequest,
 } from "../app/dashboard-events";
@@ -151,6 +153,8 @@ export class SkuApp extends LitElement {
     this.syncEmulatorPolling();
     this.addEventListener(DashboardEvents.CALIBRATE, this.handleCalibrate);
     this.addEventListener(DashboardEvents.TARE, this.handleTare);
+    this.addEventListener(DashboardEvents.DELETE_BOX, this.handleDeleteBox);
+    this.addEventListener(DashboardEvents.DELETE_LOCKER, this.handleDeleteLocker);
     this.addEventListener(DashboardEvents.CANCEL_CALIBRATION, this.handleCancelCalibration);
     this.addEventListener(DashboardEvents.RELEASE_COMPONENT, this.handleReleaseComponent);
   }
@@ -162,6 +166,8 @@ export class SkuApp extends LitElement {
     this.emulatorStore?.stop();
     this.removeEventListener(DashboardEvents.CALIBRATE, this.handleCalibrate);
     this.removeEventListener(DashboardEvents.TARE, this.handleTare);
+    this.removeEventListener(DashboardEvents.DELETE_BOX, this.handleDeleteBox);
+    this.removeEventListener(DashboardEvents.DELETE_LOCKER, this.handleDeleteLocker);
     this.removeEventListener(DashboardEvents.CANCEL_CALIBRATION, this.handleCancelCalibration);
     this.removeEventListener(DashboardEvents.RELEASE_COMPONENT, this.handleReleaseComponent);
   }
@@ -193,6 +199,22 @@ export class SkuApp extends LitElement {
     this.actionError = null;
     const locker = (event as CustomEvent<LockerOverview | null>).detail;
     void this.openDialog(locker);
+  };
+
+  private readonly handleDeleteBox = (event: Event): void => {
+    const { boxId, label } = (event as CustomEvent<DeleteBoxRequest>).detail;
+    if (confirm(`Удалить бокс ${label} из склада вместе с его слотами? История событий сохранится. Работающий бокс перестанет отображаться.`)) {
+      this.actionNotice = null;
+      void this.run(() => this.commands.deleteBox(boxId));
+    }
+  };
+
+  private readonly handleDeleteLocker = (event: Event): void => {
+    const { boxId, lockerId, label } = (event as CustomEvent<DeleteLockerRequest>).detail;
+    if (confirm(`Удалить ${label} из склада? История событий сохранится. Новые показания этого слота будут игнорироваться.`)) {
+      this.actionNotice = null;
+      void this.run(() => this.commands.deleteLocker(boxId, lockerId));
+    }
   };
 
   private readonly handleTare = (event: Event): void => {

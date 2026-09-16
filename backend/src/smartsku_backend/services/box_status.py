@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from smartsku_backend.db.models import Box
+from smartsku_backend.db.models import Box, DeletedBox
 from smartsku_backend.services.runtime_cache import LockerRuntimeCache
 
 logger = logging.getLogger(__name__)
@@ -20,6 +20,8 @@ class BoxStatusService:
         box = await self._session.get(Box, box_id)
         if box is None:
             logger.warning("Status from unknown box %s ignored", box_id)
+            return
+        if await self._session.get(DeletedBox, box_id) is not None:
             return
         box.online = status == self.ONLINE
         box.status_changed_at = datetime.now(UTC)

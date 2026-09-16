@@ -1,6 +1,6 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from smartsku_backend.db.models import Box, LockerState
+from smartsku_backend.db.models import Box, DeletedBox, DeletedLocker, LockerState
 from smartsku_backend.messaging.contracts import TareCommand
 from smartsku_backend.messaging.publisher import CommandPublisher
 from smartsku_backend.services.errors import ConflictError, NotFoundError
@@ -15,6 +15,10 @@ class TareService:
         box = await self._session.get(Box, box_id)
         if box is None:
             raise NotFoundError(f"Box {box_id} not found")
+        if await self._session.get(DeletedBox, box_id) is not None:
+            raise NotFoundError(f"Box {box_id} not found")
+        if await self._session.get(DeletedLocker, (box_id, locker_id)) is not None:
+            raise NotFoundError(f"Locker {locker_id} of box {box_id} not found")
         if not box.online:
             raise ConflictError(f"Box {box_id} is offline")
         state = await self._session.get(LockerState, (box_id, locker_id))

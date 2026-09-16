@@ -1,7 +1,7 @@
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from smartsku_backend.db.models import Box, Component, InventoryEvent, LockerState
+from smartsku_backend.db.models import Box, Component, DeletedBox, DeletedLocker, InventoryEvent, LockerState
 from smartsku_backend.services.errors import NotFoundError
 from smartsku_backend.services.runtime_cache import LockerRuntimeCache
 
@@ -13,12 +13,25 @@ class InventoryQueryService:
         self._session = session
 
     async def boxes(self) -> list[Box]:
-        return list(await self._session.scalars(select(Box).order_by(Box.created_at)))
+        return list(
+            await self._session.scalars(
+                select(Box).where(~select(DeletedBox.box_id).where(DeletedBox.box_id == Box.id).exists()).order_by(Box.created_at)
+            )
+        )
 
     async def lockers(self, box_id: str | None, free: bool | None) -> list[tuple[LockerState, Component | None]]:
         query = (
             select(LockerState, Component)
             .outerjoin(Component, Component.nfc_id == LockerState.nfc_id)
+            .where(
+                ~select(DeletedBox.box_id).where(DeletedBox.box_id == LockerState.box_id).exists(),
+                ~select(DeletedLocker.box_id)
+                .where(
+                    DeletedLocker.box_id == LockerState.box_id,
+                    DeletedLocker.locker_id == LockerState.locker_id,
+                )
+                .exists(),
+            )
             .order_by(LockerState.box_id, LockerState.locker_id)
         )
         if box_id is not None:

@@ -1,5 +1,16 @@
 import type { LockerOverview } from "./dashboard-store";
 
+export interface DeleteBoxRequest {
+  boxId: string;
+  label: string;
+}
+
+export interface DeleteLockerRequest {
+  boxId: string;
+  lockerId: number;
+  label: string;
+}
+
 export interface TareRequest {
   boxId: string;
   lockerId: number;
@@ -20,11 +31,21 @@ export interface ReleaseComponentRequest {
 export class DashboardEvents {
   static readonly CALIBRATE = "sku-calibrate";
   static readonly TARE = "sku-tare";
+  static readonly DELETE_BOX = "sku-delete-box";
+  static readonly DELETE_LOCKER = "sku-delete-locker";
   static readonly CANCEL_CALIBRATION = "sku-cancel-calibration";
   static readonly RELEASE_COMPONENT = "sku-release-component";
 
   calibrate(target: EventTarget, locker: LockerOverview | null): void {
     this.dispatch(target, DashboardEvents.CALIBRATE, locker);
+  }
+
+  deleteBox(target: EventTarget, request: DeleteBoxRequest): void {
+    this.dispatch(target, DashboardEvents.DELETE_BOX, request);
+  }
+
+  deleteLocker(target: EventTarget, request: DeleteLockerRequest): void {
+    this.dispatch(target, DashboardEvents.DELETE_LOCKER, request);
   }
 
   tare(target: EventTarget, request: TareRequest): void {

@@ -9,6 +9,16 @@ export class CommandService {
     private readonly store: DashboardStore,
   ) {}
 
+  async deleteBox(boxId: string): Promise<void> {
+    await this.api.deleteBox(boxId);
+    await this.store.refreshNow();
+  }
+
+  async deleteLocker(boxId: string, lockerId: number): Promise<void> {
+    await this.api.deleteLocker(boxId, lockerId);
+    await this.store.refreshNow();
+  }
+
   async tare(boxId: string, lockerId: number): Promise<void> {
     await this.api.tare(boxId, lockerId);
   }

@@ -65,6 +65,11 @@ export class BoxCard extends LitElement {
               title="Обнулить вес пустой ячейки в слоте 0"
               @click=${() => this.events.tare(this, { boxId: box.id, lockerId: 0, boxName: box.hardware_id })}
             >Установить ноль</button>`}
+            <button
+              class="danger"
+              title="Удалить бокс из склада вместе с его слотами"
+              @click=${() => this.events.deleteBox(this, { boxId: box.id, label: box.hardware_id })}
+            >Удалить бокс</button>
             <span class="pill ${box.online ? "good" : "bad"}" title="Статус${since}">
               ${box.online ? "● в сети" : "○ не в сети"}
             </span>

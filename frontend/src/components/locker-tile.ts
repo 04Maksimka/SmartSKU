@@ -89,6 +89,12 @@ export class LockerTile extends LitElement {
         color: var(--tone-warn);
       }
 
+      .actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
       .footer {
         margin-top: auto;
         display: flex;
@@ -126,7 +132,18 @@ export class LockerTile extends LitElement {
         ${locker.nfc_flag ? this.renderInserted() : this.renderPulledOut()}
         <div class="footer">
           <span class="muted">обновлено ${this.format.time(locker.updated_at)}</span>
-          ${this.renderAction()}
+          <div class="actions">
+            ${this.renderAction()}
+            <button
+              class="danger"
+              title="Удалить слот из склада"
+              @click=${() => this.events.deleteLocker(this, {
+                boxId: locker.box_id,
+                lockerId: locker.locker_id,
+                label: this.format.location(this.overview.boxName, locker.locker_id),
+              })}
+            >Удалить слот</button>
+          </div>
         </div>
       </div>
     `;

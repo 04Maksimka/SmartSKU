@@ -19,15 +19,6 @@ identity_store_path: var/box_identities.json
 fleet_state_path: var/fleet_state.json
 log_level: INFO
 
-boxes:
-  - hardware_id: emu-box-001
-    lockers_count: 4
-    # Cells start empty and uncalibrated
-    cells:
-      - {locker_id: 0, nfc_id: cell-0001}
-      - {locker_id: 1, nfc_id: cell-0002}
-      - {locker_id: 2, nfc_id: cell-0003}
-      - {locker_id: 3, nfc_id: cell-0004}
-
+boxes: []
 loose_cells:
   - {nfc_id: cell-0005}
