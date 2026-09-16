@@ -22,6 +22,10 @@ export class ApiClient extends HttpClient {
     return this.get(`/api/events?limit=${limit}`);
   }
 
+  tare(boxId: string, lockerId: number): Promise<void> {
+    return this.send(`/api/boxes/${encodeURIComponent(boxId)}/lockers/${lockerId}/tare`, "POST");
+  }
+
   startCalibration(request: CalibrationRequest): Promise<Calibration> {
     return this.send("/api/calibrations", "POST", request);
   }

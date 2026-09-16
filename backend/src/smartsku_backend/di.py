@@ -14,6 +14,7 @@ from smartsku_backend.services.inventory import ComponentService, InventoryQuery
 from smartsku_backend.services.provisioning import ProvisioningService
 from smartsku_backend.services.runtime_cache import LockerRuntimeCache
 from smartsku_backend.services.telemetry import TelemetryService
+from smartsku_backend.services.tare import TareService
 
 
 class ConfigProvider(Provider):
@@ -54,6 +55,7 @@ class ServicesProvider(Provider):
         BoxStatusService,
         ProvisioningService,
         CalibrationService,
+        TareService,
         InventoryQueryService,
         ComponentService,
         scope=Scope.REQUEST,

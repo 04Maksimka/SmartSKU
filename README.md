@@ -134,7 +134,7 @@ TypeScript + [Lit](https://lit.dev) (веб-компоненты — класс�
 | `smartsku/provision/response/<hardware_id>` | бэкенд → бокс | 1 | `{"hardware_id": "...", "box_id": "..."}` |
 | `smartsku/boxes/<box_id>/data` | бокс → бэкенд | 0 | `box_data.json`, каждые ~0.5 с |
 | `smartsku/boxes/<box_id>/status` | бокс → бэкенд | 1, retain | `online` при подключении; `offline` — Last Will |
-| `smartsku/boxes/<box_id>/commands` | бэкенд → бокс | 1 | `calibration_command.json` или `indicators_command.json` (поле `command`) |
+| `smartsku/boxes/<box_id>/commands` | бэкенд → бокс | 1 | `calibration_command.json`, `indicators_command.json` или `{"command":"tare","box_id":"...","locker_id":0}` |
 
 **Инициализация бокса:** при первом включении (нет `box_id` в памяти) бокс подписывается на
 `provision/response/<hardware_id>`, публикует `provision/request`, сохраняет полученный `box_id` и дальше работает
@@ -143,6 +143,7 @@ TypeScript + [Lit](https://lit.dev) (веб-компоненты — класс�
 **Требования к прошивке:**
 - без ячейки: `nfc_flag=false`, `nfc_id=""`, `weight=0`;
 - до калибровки `piece_weight=0`, `number_of_pieces=0`;
+- по команде `tare` бокс проверяет, что ячейка вставлена, и сохраняет ноль по четырём окнам измерения (~2 с);
 - по команде `calibration` бокс ждёт повторной вставки ячейки и считает `piece_weight = weight / num_of_pieces`.
   Бэкенд засчитывает калибровку, когда видит новый `piece_weight > 0` в слоте с активной заявкой.
 
@@ -208,7 +209,8 @@ arduino-cli upload  -b esp32:esp32:esp32doit-devkit-v1 --board-options UploadSpe
 открытым или переподключить USB. Serial Monitor в Arduino IDE так не делает.
 
 **Первый запуск бокса:** `docker compose up -d --build` → прошить → в Serial Monitor дождаться `running as box ...`
-→ вставить пустую ячейку, `t` → положить что-нибудь и убедиться, что `net` растёт (иначе `invertLoad`) → слот
+→ вставить пустую ячейку, нажать «Установить ноль» на карточке бокса и подтвердить, что она пустая → подождать ~2 с,
+не трогая ячейку → положить что-нибудь и убедиться, что `net` растёт (иначе `invertLoad`) → слот
 появится на фронте → калибровка с фронта как обычно, только ячейку вынимают и вставляют руками.
 
 ### Сценарий калибровки

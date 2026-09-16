@@ -1,6 +1,7 @@
 import { LitElement, css, html } from "lit";
 import { repeat } from "lit/directives/repeat.js";
 
+import { DashboardEvents } from "../app/dashboard-events";
 import type { BoxOverview } from "../app/dashboard-store";
 import { Formatter } from "../app/formatter";
 import { Theme } from "./theme";
@@ -28,6 +29,13 @@ export class BoxCard extends LitElement {
         font-size: 17px;
       }
 
+      .actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
       .grid {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
@@ -39,6 +47,7 @@ export class BoxCard extends LitElement {
   declare overview: BoxOverview;
 
   private readonly format = new Formatter();
+  private readonly events = new DashboardEvents();
 
   protected override render() {
     const { box, lockers } = this.overview;
@@ -50,9 +59,16 @@ export class BoxCard extends LitElement {
             <h3>${box.hardware_id}</h3>
             <div class="muted mono">box_id ${box.id}</div>
           </div>
-          <span class="pill ${box.online ? "good" : "bad"}" title="Статус${since}">
-            ${box.online ? "● в сети" : "○ не в сети"}
-          </span>
+          <div class="actions">
+            ${box.hardware_id.startsWith("emu-") ? "" : html`<button
+              ?disabled=${!box.online}
+              title="Обнулить вес пустой ячейки в слоте 0"
+              @click=${() => this.events.tare(this, { boxId: box.id, lockerId: 0, boxName: box.hardware_id })}
+            >Установить ноль</button>`}
+            <span class="pill ${box.online ? "good" : "bad"}" title="Статус${since}">
+              ${box.online ? "● в сети" : "○ не в сети"}
+            </span>
+          </div>
         </header>
         ${lockers.length
           ? html`<div class="grid">

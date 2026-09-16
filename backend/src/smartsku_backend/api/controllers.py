@@ -14,6 +14,7 @@ from smartsku_backend.api.schemas import (
 from smartsku_backend.db.models import CalibrationStatus
 from smartsku_backend.services.calibration import CalibrationService
 from smartsku_backend.services.inventory import ComponentService, InventoryQueryService
+from smartsku_backend.services.tare import TareService
 
 
 class BoxesController:
@@ -21,6 +22,15 @@ class BoxesController:
         self.router = APIRouter(prefix="/api", tags=["boxes"], route_class=DishkaRoute)
         self.router.add_api_route("/boxes", self.list_boxes, methods=["GET"], response_model=list[BoxSchema])
         self.router.add_api_route("/lockers", self.list_lockers, methods=["GET"], response_model=list[LockerSchema])
+        self.router.add_api_route(
+            "/boxes/{box_id}/lockers/{locker_id}/tare",
+            self.tare,
+            methods=["POST"],
+            status_code=status.HTTP_202_ACCEPTED,
+        )
+
+    async def tare(self, box_id: str, locker_id: int, tare: FromDishka[TareService]) -> None:
+        await tare.send(box_id, locker_id)
 
     async def list_boxes(self, inventory: FromDishka[InventoryQueryService]) -> list[BoxSchema]:
         return [BoxSchema.model_validate(box) for box in await inventory.boxes()]

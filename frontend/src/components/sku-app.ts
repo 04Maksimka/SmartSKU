@@ -7,6 +7,7 @@ import {
   DashboardEvents,
   type CancelCalibrationRequest,
   type ReleaseComponentRequest,
+  type TareRequest,
 } from "../app/dashboard-events";
 import type { DashboardSnapshot, DashboardStore, LockerOverview } from "../app/dashboard-store";
 import type { EmulatorStore } from "../app/emulator-store";
@@ -22,6 +23,7 @@ export class SkuApp extends LitElement {
     emulatorApi: { attribute: false },
     snapshot: { state: true },
     actionError: { state: true },
+    actionNotice: { state: true },
     tab: { state: true },
   };
 
@@ -83,6 +85,14 @@ export class SkuApp extends LitElement {
         box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
       }
 
+      .notice {
+        margin-bottom: 16px;
+        padding: 12px 14px;
+        border-radius: 10px;
+        background: var(--tone-info-bg);
+        color: var(--tone-info);
+      }
+
       .error {
         margin-bottom: 16px;
         padding: 12px 14px;
@@ -119,6 +129,7 @@ export class SkuApp extends LitElement {
   declare emulatorApi: EmulatorClient | null;
   declare snapshot: DashboardSnapshot;
   declare actionError: string | null;
+  declare actionNotice: string | null;
   declare tab: "dashboard" | "emulator";
 
   private readonly format = new Formatter();
@@ -127,6 +138,7 @@ export class SkuApp extends LitElement {
   constructor() {
     super();
     this.actionError = null;
+    this.actionNotice = null;
     this.emulatorStore = null;
     this.emulatorApi = null;
     this.tab = location.hash === "#emulator" ? "emulator" : "dashboard";
@@ -138,6 +150,7 @@ export class SkuApp extends LitElement {
     window.addEventListener("hashchange", this.handleHashChange);
     this.syncEmulatorPolling();
     this.addEventListener(DashboardEvents.CALIBRATE, this.handleCalibrate);
+    this.addEventListener(DashboardEvents.TARE, this.handleTare);
     this.addEventListener(DashboardEvents.CANCEL_CALIBRATION, this.handleCancelCalibration);
     this.addEventListener(DashboardEvents.RELEASE_COMPONENT, this.handleReleaseComponent);
   }
@@ -148,6 +161,7 @@ export class SkuApp extends LitElement {
     window.removeEventListener("hashchange", this.handleHashChange);
     this.emulatorStore?.stop();
     this.removeEventListener(DashboardEvents.CALIBRATE, this.handleCalibrate);
+    this.removeEventListener(DashboardEvents.TARE, this.handleTare);
     this.removeEventListener(DashboardEvents.CANCEL_CALIBRATION, this.handleCancelCalibration);
     this.removeEventListener(DashboardEvents.RELEASE_COMPONENT, this.handleReleaseComponent);
   }
@@ -179,6 +193,19 @@ export class SkuApp extends LitElement {
     this.actionError = null;
     const locker = (event as CustomEvent<LockerOverview | null>).detail;
     void this.openDialog(locker);
+  };
+
+  private readonly handleTare = (event: Event): void => {
+    const { boxId, lockerId, boxName } = (event as CustomEvent<TareRequest>).detail;
+    const prompt = `Вставлена ли пустая ячейка в слот ${lockerId} бокса ${boxName}? Уберите из неё все предметы и не трогайте примерно 2 секунды после подтверждения.`;
+    if (!confirm(prompt)) {
+      return;
+    }
+    this.actionNotice = null;
+    void this.run(async () => {
+      await this.commands.tare(boxId, lockerId);
+      this.actionNotice = `Команда отправлена боксу ${boxName}. Держите пустую ячейку неподвижно около 2 секунд; после установки нуля слот появится в интерфейсе.`;
+    });
   };
 
   private readonly handleCancelCalibration = (event: Event): void => {
@@ -271,6 +298,7 @@ export class SkuApp extends LitElement {
     const snapshot = this.snapshot;
     return html`
       ${this.actionError ? html`<div class="error">${this.actionError}</div>` : nothing}
+      ${this.actionNotice ? html`<div class="notice">${this.actionNotice}</div>` : nothing}
       ${snapshot.error
         ? html`<div class="error">Не удалось обновить данные: ${snapshot.error}. Показаны последние полученные.</div>`
         : nothing}

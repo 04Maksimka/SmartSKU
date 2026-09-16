@@ -26,7 +26,7 @@ public:
   }
   // Ноль выставлен, вес измерен и не «плывёт» после вставки; иначе ячейку не стоит отправлять в телеметрию
   bool ready() const {
-    return hasZero_ && windowReady_ && settled_;
+    return hasZero_ && tareWindowsLeft_ == 0 && windowReady_ && settled_;
   }
   void fillReading(JsonObject reading) const;
   void printStatus() const;
@@ -37,8 +37,8 @@ public:
   // Нет связи с бэкендом — дисплей показывает количество, посчитанное самим боксом
   void setBackendOnline(bool online);
 
-  // Сервисная команда из Serial: ноль по вставленной пустой ячейке
-  void requestTare();
+  // Ноль по вставленной пустой ячейке; false, если ячейки или датчика нет.
+  bool requestTare();
 
 private:
   void onWindow();

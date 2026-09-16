@@ -36,6 +36,12 @@ class CalibrationCommand(BaseModel):
     num_of_pieces: int = Field(gt=0)
 
 
+class TareCommand(BaseModel):
+    command: Literal["tare"] = "tare"
+    box_id: str
+    locker_id: int
+
+
 class IndicatorsCommand(BaseModel):
     command: Literal["indicators"] = "indicators"
     box_id: str

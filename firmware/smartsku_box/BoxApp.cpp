@@ -178,6 +178,8 @@ void BoxApp::handleCommand(const String &payload) {
       return;
     }
     locker->startCalibration(pieces);
+  } else if (command == "tare") {
+    locker->requestTare();
   } else if (command == "indicators") {
     String color = doc["led_color"] | "none";
     if (!locker->applyIndicators(color, doc["screen_number"] | 0)) {

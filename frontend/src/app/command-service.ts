@@ -9,6 +9,10 @@ export class CommandService {
     private readonly store: DashboardStore,
   ) {}
 
+  async tare(boxId: string, lockerId: number): Promise<void> {
+    await this.api.tare(boxId, lockerId);
+  }
+
   async startCalibration(request: CalibrationRequest): Promise<Calibration> {
     const calibration = await this.api.startCalibration(request);
     await this.store.refreshNow();

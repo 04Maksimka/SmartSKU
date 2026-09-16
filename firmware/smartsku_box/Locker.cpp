@@ -79,7 +79,11 @@ void Locker::onWindow() {
   refreshDisplay();
 }
 
-void Locker::requestTare() {
+bool Locker::requestTare() {
+  if (!nfc_.present() || loadCell_.failed()) {
+    Serial.printf("[locker %u] tare rejected: insert the empty cell and check HX711\n", id_);
+    return false;
+  }
   tareWindowsLeft_ = AppConfig::TARE_WINDOWS;
   tareSum_ = 0;
   loadCell_.restartWindow();
@@ -87,6 +91,7 @@ void Locker::requestTare() {
   Serial.printf(
     "[locker %u] taring: keep the empty cell still for %lu ms\n", id_, AppConfig::MEASURE_WINDOW_MS * AppConfig::TARE_WINDOWS
   );
+  return true;
 }
 
 void Locker::applyTare() {
