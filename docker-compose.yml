@@ -1,0 +1,40 @@
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./infra/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mosquitto_data:/mosquitto/data
+
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/var:/app/var
+    depends_on:
+      - mosquitto
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "8080:80"
+    volumes:
+      - ./frontend/public/config.yaml:/usr/share/nginx/html/config.yaml:ro
+    depends_on:
+      - backend
+
+  emulator:
+    build: ./emulator
+    profiles: ["emulator"]
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./emulator/var:/app/var
+    depends_on:
+      - mosquitto
+      - backend
+
+volumes:
+  mosquitto_data:

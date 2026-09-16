@@ -1,0 +1,9 @@
+# Runtime config: served next to the page, can be replaced without rebuilding (see docker-compose volume)
+# Empty string: same origin, requests go through the vite dev proxy or nginx
+api_base_url: ""
+# How often the dashboard re-reads the backend
+refresh_interval_ms: 1000
+# How many latest inventory events the log keeps
+events_limit: 200
+# How many latest calibrations are listed
+calibrations_limit: 20

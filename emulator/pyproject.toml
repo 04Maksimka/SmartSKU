@@ -1,0 +1,39 @@
+[project]
+name = "smartsku-emulator"
+version = "0.1.0"
+description = "SmartSKU ESP32 box emulator: publishes box telemetry over MQTT and exposes REST handles to manipulate virtual cells"
+requires-python = ">=3.13"
+dependencies = [
+    "aiomqtt>=2.5.1",
+    "dishka>=1.10.1",
+    "fastapi>=0.141.1",
+    "pydantic>=2.13.5",
+    "pyyaml>=6.0.3",
+    "uvicorn[standard]>=0.53.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.11.31,<0.12.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "smartsku_emulator"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "ruff>=0.16.7",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "UP", "B", "SIM", "RUF", "ASYNC", "PL", "N"]
+ignore = ["PLR0913", "PLR2004"]

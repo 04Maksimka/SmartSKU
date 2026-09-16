@@ -1,0 +1,24 @@
+server:
+  host: 0.0.0.0
+  port: 8000
+
+database:
+  # Relative to backend/; in Docker ./backend/var is bind-mounted, so the DB file is visible on the host
+  path: var/smartsku.db
+  busy_timeout_seconds: 30
+  echo: false
+
+mqtt:
+  host: localhost
+  port: 1883
+  client_id: smartsku-backend
+  topic_prefix: smartsku
+  reconnect_interval_seconds: 3
+  keepalive_seconds: 30
+
+telemetry:
+  # Weight changes below this value (sensor noise) are not treated as a state change
+  weight_change_threshold_grams: 0.5
+
+logging:
+  level: INFO
