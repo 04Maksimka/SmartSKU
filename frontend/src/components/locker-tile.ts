@@ -1,5 +1,6 @@
 import { LitElement, css, html, nothing } from "lit";
 
+import { DashboardEvents } from "../app/dashboard-events";
 import type { LockerOverview } from "../app/dashboard-store";
 import { Formatter } from "../app/formatter";
 import { Theme } from "./theme";
@@ -90,6 +91,11 @@ export class LockerTile extends LitElement {
 
       .footer {
         margin-top: auto;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        flex-wrap: wrap;
         font-size: 12px;
       }
     `,
@@ -98,6 +104,7 @@ export class LockerTile extends LitElement {
   declare overview: LockerOverview;
 
   private readonly format = new Formatter();
+  private readonly events = new DashboardEvents();
   private signature = "";
 
   protected override render() {
@@ -117,9 +124,44 @@ export class LockerTile extends LitElement {
             </div>`
           : nothing}
         ${locker.nfc_flag ? this.renderInserted() : this.renderPulledOut()}
-        <div class="footer muted">обновлено ${this.format.time(locker.updated_at)}</div>
+        <div class="footer">
+          <span class="muted">обновлено ${this.format.time(locker.updated_at)}</span>
+          ${this.renderAction()}
+        </div>
       </div>
     `;
+  }
+
+  private renderAction() {
+    const { locker, pendingCalibration } = this.overview;
+    const component = locker.component;
+    if (pendingCalibration) {
+      return html`<button
+        @click=${() =>
+          this.events.cancelCalibration(this, { id: pendingCalibration.id, label: pendingCalibration.name })}
+      >
+        Отменить
+      </button>`;
+    }
+    if (component) {
+      return html`<button
+        class="danger"
+        title="Забыть, что лежит в ячейке, чтобы откалибровать её заново"
+        @click=${() =>
+          this.events.releaseComponent(this, {
+            nfcId: component.nfc_id,
+            label: `«${component.name}» в ${this.format.location(this.overview.boxName, locker.locker_id)}`,
+          })}
+      >
+        Освободить
+      </button>`;
+    }
+    return html`<button
+      class="primary"
+      @click=${() => this.events.calibrate(this, this.overview)}
+    >
+      Откалибровать
+    </button>`;
   }
 
   protected override updated(): void {

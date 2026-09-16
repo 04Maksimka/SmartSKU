@@ -68,6 +68,22 @@ class CalibrationService:
         logger.info("Calibration %s started for box %s locker %s", calibration.id, box_id, locker_id)
         return calibration
 
+    async def cancel(self, calibration_id: int) -> Calibration:
+        """Drop a request the user no longer wants.
+
+        The box keeps waiting for a cell until it gets another calibration command, so the operator simply
+        leaves the cell alone; the backend will not turn the next insertion into a component.
+        """
+        calibration = await self._session.get(Calibration, calibration_id)
+        if calibration is None:
+            raise NotFoundError(f"Calibration {calibration_id} not found")
+        if calibration.status is not CalibrationStatus.PENDING:
+            raise ConflictError(f"Calibration {calibration_id} is already {calibration.status.value}")
+        calibration.status = CalibrationStatus.CANCELLED
+        await self._session.commit()
+        logger.info("Calibration %s cancelled", calibration_id)
+        return calibration
+
     async def list(self, status: CalibrationStatus | None) -> list[Calibration]:
         query = select(Calibration).order_by(Calibration.created_at.desc())
         if status is not None:

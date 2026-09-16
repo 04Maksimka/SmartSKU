@@ -67,6 +67,11 @@ export class DashboardStore {
     return () => this.listeners.delete(listener);
   }
 
+  /** Pulls fresh data right away, e.g. after the user changed something. */
+  async refreshNow(): Promise<void> {
+    await this.tick();
+  }
+
   start(): void {
     document.addEventListener("visibilitychange", this.handleVisibility);
     void this.tick();

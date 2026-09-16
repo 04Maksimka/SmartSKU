@@ -1,5 +1,6 @@
 import { LitElement, html } from "lit";
 
+import { DashboardEvents } from "../app/dashboard-events";
 import type { ComponentOverview } from "../app/dashboard-store";
 import { Formatter } from "../app/formatter";
 import { Theme } from "./theme";
@@ -17,6 +18,7 @@ export class ComponentTable extends LitElement {
   declare query: string;
 
   private readonly format = new Formatter();
+  private readonly events = new DashboardEvents();
 
   constructor() {
     super();
@@ -47,6 +49,7 @@ export class ComponentTable extends LitElement {
                   <th>Где</th>
                   <th>Ячейка</th>
                   <th>Калибровка</th>
+                  <th></th>
                 </tr>
               </thead>
               <tbody>
@@ -76,6 +79,19 @@ export class ComponentTable extends LitElement {
         </td>
         <td class="mono">${component.nfc_id}</td>
         <td class="muted nowrap">${this.format.moment(component.calibrated_at)}</td>
+        <td class="nowrap">
+          <button
+            class="danger"
+            title="Забыть, что лежит в ячейке, чтобы откалибровать её заново"
+            @click=${() =>
+              this.events.releaseComponent(this, {
+                nfcId: component.nfc_id,
+                label: `«${component.name}» (${component.nfc_id})`,
+              })}
+          >
+            Освободить
+          </button>
+        </td>
       </tr>
     `;
   }

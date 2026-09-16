@@ -1,4 +1,5 @@
 import { ApiClient } from "./api/client";
+import { CommandService } from "./app/command-service";
 import { DashboardStore } from "./app/dashboard-store";
 import { ElementRegistry } from "./app/element-registry";
 import { SkuApp } from "./components/sku-app";
@@ -8,9 +9,11 @@ class Application {
   async start(): Promise<void> {
     new ElementRegistry().register();
     const config = await new ConfigLoader().load(`${import.meta.env.BASE_URL}config.yaml`);
-    const store = new DashboardStore(new ApiClient(config.apiBaseUrl), config);
+    const api = new ApiClient(config.apiBaseUrl);
+    const store = new DashboardStore(api, config);
     const app = new SkuApp();
     app.store = store;
+    app.commands = new CommandService(api, store);
     document.body.replaceChildren(app);
     store.start();
   }

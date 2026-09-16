@@ -3,6 +3,7 @@ from dishka import AsyncContainer, Provider, Scope, from_context, make_async_con
 from smartsku_emulator.config import EmulatorConfig, MqttConfig
 from smartsku_emulator.domain.identity_store import BoxIdentityStore
 from smartsku_emulator.domain.model import Fleet
+from smartsku_emulator.domain.state_store import FleetStateStore
 from smartsku_emulator.messaging.supervisor import FleetFactory, FleetSupervisor
 from smartsku_emulator.messaging.topics import MqttTopics
 
@@ -21,8 +22,12 @@ class EmulatorProvider(Provider):
         return BoxIdentityStore(config.identity_store_path)
 
     @provide
-    def fleet(self, config: EmulatorConfig, identity_store: BoxIdentityStore) -> Fleet:
-        return FleetFactory(config, identity_store).create()
+    def state_store(self, config: EmulatorConfig) -> FleetStateStore:
+        return FleetStateStore(config.fleet_state_path)
+
+    @provide
+    def fleet(self, config: EmulatorConfig, identity_store: BoxIdentityStore, state_store: FleetStateStore) -> Fleet:
+        return FleetFactory(config, identity_store, state_store).create()
 
     topics = provide(MqttTopics)
     supervisor = provide(FleetSupervisor)

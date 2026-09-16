@@ -39,6 +39,7 @@ class EmulatorConfig(BaseModel):
     publish_interval_seconds: float
     weight_noise_grams: float
     identity_store_path: Path
+    fleet_state_path: Path
     boxes: list[BoxSeed]
     loose_cells: list[CellSeed] = Field(default_factory=list)
     log_level: str = "INFO"

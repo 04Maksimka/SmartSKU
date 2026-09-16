@@ -44,6 +44,14 @@ export interface Calibration {
   completed_at: string | null;
 }
 
+export interface CalibrationRequest {
+  box_id: string;
+  locker_id: number;
+  name: string;
+  tags: string[];
+  num_of_pieces: number;
+}
+
 export type InventoryEventType = "cell_removed" | "cell_inserted" | "quantity_changed" | "calibrated";
 
 export interface InventoryEvent {

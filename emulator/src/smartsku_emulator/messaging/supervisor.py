@@ -4,6 +4,7 @@ import contextlib
 from smartsku_emulator.config import EmulatorConfig
 from smartsku_emulator.domain.identity_store import BoxIdentityStore
 from smartsku_emulator.domain.model import Fleet, VirtualBox
+from smartsku_emulator.domain.state_store import FleetStateStore
 from smartsku_emulator.messaging.box_link import BoxLink
 from smartsku_emulator.messaging.topics import MqttTopics
 
@@ -42,12 +43,19 @@ class FleetSupervisor:
 
 
 class FleetFactory:
-    def __init__(self, config: EmulatorConfig, identity_store: BoxIdentityStore) -> None:
+    def __init__(self, config: EmulatorConfig, identity_store: BoxIdentityStore, state_store: FleetStateStore) -> None:
         self._config = config
         self._identity_store = identity_store
+        self._state_store = state_store
 
     def create(self) -> Fleet:
-        fleet = Fleet()
+        fleet = Fleet(self._state_store)
+        self._state_store.attach(fleet)
+        state = self._state_store.load()
+        if state is not None:
+            fleet.restore(state)
+            return fleet
+
         identities = self._identity_store.load()
         for seed in self._config.boxes:
             box = VirtualBox(seed.hardware_id, seed.lockers_count, identities.get(seed.hardware_id))

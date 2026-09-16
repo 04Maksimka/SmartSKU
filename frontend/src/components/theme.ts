@@ -149,6 +149,44 @@ export class Theme {
       min-width: 0;
     }
 
+    button {
+      font: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 6px 12px;
+      cursor: pointer;
+    }
+
+    button:hover:not(:disabled) {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    button:disabled {
+      opacity: 0.55;
+      cursor: progress;
+    }
+
+    button.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+
+    button.primary:hover:not(:disabled) {
+      filter: brightness(1.08);
+      color: #fff;
+    }
+
+    button.danger:hover:not(:disabled) {
+      border-color: var(--tone-bad);
+      color: var(--tone-bad);
+    }
+
     .filters {
       display: flex;
       gap: 8px;

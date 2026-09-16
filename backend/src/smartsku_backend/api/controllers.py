@@ -57,6 +57,9 @@ class CalibrationController:
             status_code=status.HTTP_201_CREATED,
         )
         self.router.add_api_route("", self.list, methods=["GET"], response_model=list[CalibrationSchema])
+        self.router.add_api_route(
+            "/{calibration_id}", self.cancel, methods=["DELETE"], response_model=CalibrationSchema
+        )
 
     async def start(
         self, request: CalibrationRequest, calibrations: FromDishka[CalibrationService]
@@ -69,6 +72,9 @@ class CalibrationController:
             num_of_pieces=request.num_of_pieces,
         )
         return CalibrationSchema.model_validate(calibration)
+
+    async def cancel(self, calibration_id: int, calibrations: FromDishka[CalibrationService]) -> CalibrationSchema:
+        return CalibrationSchema.model_validate(await calibrations.cancel(calibration_id))
 
     async def list(
         self,

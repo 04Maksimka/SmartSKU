@@ -1,4 +1,5 @@
 import { BoxCard } from "../components/box-card";
+import { CalibrationDialog } from "../components/calibration-dialog";
 import { CalibrationList } from "../components/calibration-list";
 import { ComponentTable } from "../components/component-table";
 import { EventLog } from "../components/event-log";
@@ -13,6 +14,7 @@ export class ElementRegistry {
     ["sku-component-table", ComponentTable],
     ["sku-calibration-list", CalibrationList],
     ["sku-event-log", EventLog],
+    ["sku-calibration-dialog", CalibrationDialog],
   ];
 
   register(): void {

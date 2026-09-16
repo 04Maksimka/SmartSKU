@@ -1,7 +1,9 @@
 import logging
 import random
+from typing import Any
 
 from smartsku_emulator.domain.errors import ConflictError, NotFoundError
+from smartsku_emulator.domain.state_store import NullFleetStateStore
 from smartsku_emulator.messaging.contracts import LockerReading
 
 logger = logging.getLogger(__name__)
@@ -16,6 +18,15 @@ class VirtualCell:
 
     def add_grams(self, grams: float) -> None:
         self.weight = max(0.0, self.weight + grams)
+
+    def snapshot(self) -> dict[str, Any]:
+        return {"nfc_id": self.nfc_id, "weight": self.weight}
+
+    @classmethod
+    def restored(cls, data: dict[str, Any]) -> "VirtualCell":
+        cell = cls(str(data["nfc_id"]))
+        cell.weight = float(data.get("weight", 0.0))
+        return cell
 
 
 class VirtualLocker:
@@ -38,6 +49,10 @@ class VirtualBox:
         self.connected = False
         self.lockers = {locker_id: VirtualLocker(locker_id) for locker_id in range(lockers_count)}
         self.piece_weights: dict[str, float] = {}
+        self._store: NullFleetStateStore = NullFleetStateStore()
+
+    def attach_store(self, store: NullFleetStateStore) -> None:
+        self._store = store
 
     def locker(self, locker_id: int) -> VirtualLocker:
         if locker_id not in self.lockers:
@@ -61,6 +76,7 @@ class VirtualBox:
             return
         self.piece_weights[cell.nfc_id] = cell.weight / locker.pending_calibration
         locker.pending_calibration = None
+        self._store.record()
 
     def remove(self, locker_id: int) -> VirtualCell:
         locker = self.locker(locker_id)
@@ -71,11 +87,28 @@ class VirtualBox:
 
     def apply_calibration(self, locker_id: int, num_of_pieces: int) -> None:
         self.locker(locker_id).pending_calibration = num_of_pieces
+        self._store.record()
 
     def apply_indicators(self, locker_id: int, led_color: str, screen_number: int) -> None:
         locker = self.locker(locker_id)
         locker.led_color = led_color
         locker.screen_number = screen_number
+
+    def snapshot(self) -> dict[str, Any]:
+        return {
+            "hardware_id": self.hardware_id,
+            "box_id": self.box_id,
+            "lockers_count": len(self.lockers),
+            "piece_weights": self.piece_weights,
+            "lockers": [
+                {
+                    "locker_id": locker.locker_id,
+                    "nfc_id": locker.cell.nfc_id if locker.cell else None,
+                    "pending_calibration": locker.pending_calibration,
+                }
+                for locker in self.lockers.values()
+            ],
+        }
 
     def readings(self, noise_grams: float) -> list[LockerReading]:
         readings = []
@@ -110,9 +143,10 @@ class VirtualBox:
 class Fleet:
     """All emulated boxes plus cells that are currently pulled out and carried around."""
 
-    def __init__(self) -> None:
+    def __init__(self, store: NullFleetStateStore | None = None) -> None:
         self.boxes: dict[str, VirtualBox] = {}
         self.loose_cells: dict[str, VirtualCell] = {}
+        self._store = store or NullFleetStateStore()
 
     def box(self, hardware_id: str) -> VirtualBox:
         if hardware_id not in self.boxes:
@@ -122,18 +156,22 @@ class Fleet:
     def add_box(self, box: VirtualBox) -> None:
         if box.hardware_id in self.boxes:
             raise ConflictError(f"Box {box.hardware_id} already exists")
+        box.attach_store(self._store)
         self.boxes[box.hardware_id] = box
+        self._store.record()
 
     def create_cell(self, nfc_id: str) -> VirtualCell:
         if self._locate(nfc_id) is not None:
             raise ConflictError(f"Cell {nfc_id} already exists")
         cell = VirtualCell(nfc_id)
         self.loose_cells[nfc_id] = cell
+        self._store.record()
         return cell
 
     def add_grams(self, nfc_id: str, grams: float) -> VirtualCell:
         cell = self.cell(nfc_id)
         cell.add_grams(grams)
+        self._store.record()
         return cell
 
     def add_pieces(self, nfc_id: str, pieces: int) -> VirtualCell:
@@ -151,6 +189,7 @@ class Fleet:
     def pull_out(self, hardware_id: str, locker_id: int) -> VirtualCell:
         cell = self.box(hardware_id).remove(locker_id)
         self.loose_cells[cell.nfc_id] = cell
+        self._store.record()
         return cell
 
     def insert(self, hardware_id: str, locker_id: int, nfc_id: str) -> None:
@@ -158,6 +197,34 @@ class Fleet:
             raise NotFoundError(f"Cell {nfc_id} is not pulled out")
         self.box(hardware_id).insert(locker_id, self.loose_cells[nfc_id])
         del self.loose_cells[nfc_id]
+        self._store.record()
+
+    def snapshot(self) -> dict[str, Any]:
+        cells = [cell.snapshot() for cell in self.loose_cells.values()]
+        for box in self.boxes.values():
+            cells.extend(locker.cell.snapshot() for locker in box.lockers.values() if locker.cell is not None)
+        return {"boxes": [box.snapshot() for box in self.boxes.values()], "cells": cells}
+
+    def restore(self, state: dict[str, Any]) -> None:
+        """Rebuilds the fleet saved before the restart; config seeds are ignored while that state exists."""
+        cells = {str(data["nfc_id"]): VirtualCell.restored(data) for data in state.get("cells", [])}
+        self.loose_cells = dict(cells)
+        for box_data in state.get("boxes", []):
+            box = VirtualBox(
+                str(box_data["hardware_id"]),
+                int(box_data.get("lockers_count", 4)),
+                box_data.get("box_id"),
+            )
+            box.piece_weights = {str(nfc_id): float(weight) for nfc_id, weight in box_data["piece_weights"].items()}
+            box.attach_store(self._store)
+            self.boxes[box.hardware_id] = box
+            for locker_data in box_data.get("lockers", []):
+                locker = box.locker(int(locker_data["locker_id"]))
+                locker.pending_calibration = locker_data.get("pending_calibration")
+                nfc_id = locker_data.get("nfc_id")
+                if nfc_id is not None and nfc_id in cells:
+                    locker.cell = cells[nfc_id]
+                    self.loose_cells.pop(nfc_id, None)
 
     def cell(self, nfc_id: str) -> VirtualCell:
         cell = self._locate(nfc_id)

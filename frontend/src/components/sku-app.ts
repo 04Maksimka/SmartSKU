@@ -1,14 +1,23 @@
 import { LitElement, css, html, nothing } from "lit";
 import { repeat } from "lit/directives/repeat.js";
 
-import type { DashboardSnapshot, DashboardStore } from "../app/dashboard-store";
+import type { CommandService } from "../app/command-service";
+import {
+  DashboardEvents,
+  type CancelCalibrationRequest,
+  type ReleaseComponentRequest,
+} from "../app/dashboard-events";
+import type { DashboardSnapshot, DashboardStore, LockerOverview } from "../app/dashboard-store";
 import { Formatter } from "../app/formatter";
+import type { CalibrationDialog } from "./calibration-dialog";
 import { Theme } from "./theme";
 
 export class SkuApp extends LitElement {
   static override properties = {
     store: { attribute: false },
+    commands: { attribute: false },
     snapshot: { state: true },
+    actionError: { state: true },
   };
 
   static override styles = [
@@ -42,6 +51,13 @@ export class SkuApp extends LitElement {
         font-size: 13px;
       }
 
+      .toolbar {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+
       .error {
         margin-bottom: 16px;
         padding: 12px 14px;
@@ -62,7 +78,7 @@ export class SkuApp extends LitElement {
 
       .split {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(min(100%, 560px), 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 680px), 1fr));
         gap: 32px 16px;
       }
 
@@ -73,19 +89,70 @@ export class SkuApp extends LitElement {
   ];
 
   declare store: DashboardStore;
+  declare commands: CommandService;
   declare snapshot: DashboardSnapshot;
+  declare actionError: string | null;
 
   private readonly format = new Formatter();
   private unsubscribe: (() => void) | null = null;
 
+  constructor() {
+    super();
+    this.actionError = null;
+  }
+
   override connectedCallback(): void {
     super.connectedCallback();
     this.unsubscribe = this.store.subscribe((snapshot) => (this.snapshot = snapshot));
+    this.addEventListener(DashboardEvents.CALIBRATE, this.handleCalibrate);
+    this.addEventListener(DashboardEvents.CANCEL_CALIBRATION, this.handleCancelCalibration);
+    this.addEventListener(DashboardEvents.RELEASE_COMPONENT, this.handleReleaseComponent);
   }
 
   override disconnectedCallback(): void {
     super.disconnectedCallback();
     this.unsubscribe?.();
+    this.removeEventListener(DashboardEvents.CALIBRATE, this.handleCalibrate);
+    this.removeEventListener(DashboardEvents.CANCEL_CALIBRATION, this.handleCancelCalibration);
+    this.removeEventListener(DashboardEvents.RELEASE_COMPONENT, this.handleReleaseComponent);
+  }
+
+  private readonly handleCalibrate = (event: Event): void => {
+    this.actionError = null;
+    const locker = (event as CustomEvent<LockerOverview | null>).detail;
+    void this.openDialog(locker);
+  };
+
+  private readonly handleCancelCalibration = (event: Event): void => {
+    const request = (event as CustomEvent<CancelCalibrationRequest>).detail;
+    if (confirm(`Отменить калибровку «${request.label}»?`)) {
+      void this.run(() => this.commands.cancelCalibration(request.id));
+    }
+  };
+
+  private readonly handleReleaseComponent = (event: Event): void => {
+    const request = (event as CustomEvent<ReleaseComponentRequest>).detail;
+    if (confirm(`Освободить ячейку: ${request.label}? Бэкенд забудет, что в ней лежит.`)) {
+      void this.run(() => this.commands.releaseComponent(request.nfcId));
+    }
+  };
+
+  private async run(action: () => Promise<void>): Promise<void> {
+    this.actionError = null;
+    try {
+      await action();
+    } catch (error) {
+      this.actionError = error instanceof Error ? error.message : String(error);
+    }
+  }
+
+  private async openDialog(locker: LockerOverview | null): Promise<void> {
+    await this.updateComplete;
+    this.renderRoot.querySelector<CalibrationDialog>("sku-calibration-dialog")?.open(locker);
+  }
+
+  private lockers(): LockerOverview[] {
+    return this.snapshot.boxes.flatMap((box) => box.lockers);
   }
 
   protected override render() {
@@ -93,16 +160,21 @@ export class SkuApp extends LitElement {
     return html`
       <header>
         <h1>SmartSKU</h1>
-        <div class="status muted">
+        <div class="toolbar">
+          <button class="primary" @click=${() => void this.openDialog(null)}>Калибровка</button>
+          <div class="status muted">
           ${snapshot.error
             ? html`<span class="pill bad">○ нет связи с бэкендом</span>`
             : snapshot.updatedAt
               ? html`<span class="pill good">● онлайн</span>`
               : html`<span class="pill">загрузка…</span>`}
           ${snapshot.updatedAt ? html`<span>данные на ${this.format.time(snapshot.updatedAt)}</span>` : nothing}
-          <span>обновление раз в ${this.store.refreshIntervalMs / 1000} с</span>
+            <span>обновление раз в ${this.store.refreshIntervalMs / 1000} с</span>
+          </div>
         </div>
       </header>
+
+      ${this.actionError ? html`<div class="error">${this.actionError}</div>` : nothing}
 
       ${snapshot.error
         ? html`<div class="error">Не удалось обновить данные: ${snapshot.error}. Показаны последние полученные.</div>`
@@ -130,6 +202,12 @@ export class SkuApp extends LitElement {
           .boxNames=${snapshot.boxNames}
         ></sku-calibration-list>
       </section>
+
+      <sku-calibration-dialog
+        .lockers=${this.lockers()}
+        .calibrations=${snapshot.calibrations}
+        .service=${this.commands}
+      ></sku-calibration-dialog>
 
       <section>
         <sku-event-log .events=${snapshot.events} .boxNames=${snapshot.boxNames}></sku-event-log>
