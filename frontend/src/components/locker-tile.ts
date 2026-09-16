@@ -188,7 +188,7 @@ export class LockerTile extends LitElement {
         <div class="name muted">Не откалибрована</div>
         <dl>
           <dt>Вес</dt>
-          <dd>${this.format.grams(locker.weight)}</dd>
+          <dd>${this.format.weight(locker.weight)}</dd>
           <dt>Ячейка</dt>
           <dd class="mono">${locker.nfc_id}</dd>
         </dl>
@@ -202,7 +202,7 @@ export class LockerTile extends LitElement {
       <div class="quantity"><strong>${locker.quantity ?? "—"}</strong><span class="muted">шт</span></div>
       <dl>
         <dt>Вес</dt>
-        <dd>${this.format.grams(locker.weight)}</dd>
+        <dd>${this.format.weight(locker.weight)}</dd>
         <dt>1 штука</dt>
         <dd>${this.format.pieceWeight(component.piece_weight)}</dd>
         <dt>Ячейка</dt>

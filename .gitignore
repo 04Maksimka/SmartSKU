@@ -8,3 +8,6 @@ var/
 .vscode/
 node_modules/
 dist/
+
+# Arduino: Wi-Fi passwords and broker addresses
+firmware/**/secrets.h

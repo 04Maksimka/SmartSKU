@@ -39,12 +39,13 @@ export class Formatter {
     return date.toDateString() === new Date().toDateString() ? time : `${this.dateFormat.format(date)} ${time}`;
   }
 
-  grams(value: number): string {
-    return `${value.toLocaleString("ru-RU", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} г`;
+  /** Weight is in arbitrary units: raw load cell counts on real boxes, grams in the emulator. */
+  weight(value: number): string {
+    return `${value.toLocaleString("ru-RU", { maximumFractionDigits: 1 })} ед.`;
   }
 
   pieceWeight(value: number): string {
-    return `${value.toLocaleString("ru-RU", { maximumFractionDigits: 3 })} г`;
+    return `${value.toLocaleString("ru-RU", { maximumFractionDigits: 3 })} ед.`;
   }
 
   pieces(value: number | null): string {

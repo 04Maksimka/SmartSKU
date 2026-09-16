@@ -139,7 +139,7 @@ export class EventLog extends LitElement {
             ? html`<span class="muted">—</span>`
             : `${item.quantity_before ?? "—"} → ${item.quantity_after ?? "—"}`}
         </td>
-        <td class="num muted">${this.format.grams(item.weight)}</td>
+        <td class="num muted">${this.format.weight(item.weight)}</td>
       </tr>
     `;
   }

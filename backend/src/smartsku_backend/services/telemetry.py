@@ -43,7 +43,7 @@ class TelemetryService:
         readings = [
             reading
             for reading in message.lockers
-            if self._cache.is_significant(message.box_id, reading, self._config.weight_change_threshold_grams)
+            if self._cache.is_significant(message.box_id, reading, self._config.weight_change_threshold)
         ]
         if not readings:
             return

@@ -17,8 +17,9 @@ mqtt:
   keepalive_seconds: 30
 
 telemetry:
-  # Weight changes below this value (sensor noise) are not treated as a state change
-  weight_change_threshold_grams: 0.5
+  # Weight is in arbitrary units (real boxes: raw HX711 counts, they filter their own noise; emulator: grams).
+  # Weight changes below this value are not treated as a state change
+  weight_change_threshold: 0.5
 
 logging:
   level: INFO

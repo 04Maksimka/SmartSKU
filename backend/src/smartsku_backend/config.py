@@ -30,7 +30,7 @@ class MqttConfig(BaseModel):
 
 
 class TelemetryConfig(BaseModel):
-    weight_change_threshold_grams: float
+    weight_change_threshold: float
 
 
 class LoggingConfig(BaseModel):

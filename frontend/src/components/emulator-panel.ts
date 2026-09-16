@@ -299,7 +299,7 @@ export class EmulatorPanel extends LitElement {
           ? this.renderInsert(box, locker)
           : html`
               <div class="mono muted">${cell.nfc_id}</div>
-              <div class="weight">${this.format.grams(cell.weight)}</div>
+              <div class="weight">${this.format.weight(cell.weight)}</div>
               <div class="muted" style="font-size: 12px">
                 ${locker.calibrated_piece_weight === null
                   ? "не откалибрована"
@@ -332,7 +332,7 @@ export class EmulatorPanel extends LitElement {
         <select @change=${(event: Event) => this.setInsert(key, (event.target as HTMLSelectElement).value)}>
           ${loose.map(
             (cell) => html`<option value=${cell.nfc_id} ?selected=${cell.nfc_id === chosen}>
-              ${cell.nfc_id} · ${this.format.grams(cell.weight)}
+              ${cell.nfc_id} · ${this.format.weight(cell.weight)}
             </option>`,
           )}
         </select>
@@ -359,7 +359,7 @@ export class EmulatorPanel extends LitElement {
           .value=${grams}
           @input=${(event: Event) => this.setGrams(cell.nfc_id, (event.target as HTMLInputElement).value)}
         />
-        <span class="unit">г</span>
+        <span class="unit">ед.</span>
         <button
           ?disabled=${this.busy !== null}
           @click=${() => void this.changeGrams(cell.nfc_id, Number(grams))}
@@ -411,7 +411,7 @@ export class EmulatorPanel extends LitElement {
             (cell) => html`
               <div class="card tile">
                 <div class="mono muted">${cell.nfc_id}</div>
-                <div class="weight">${this.format.grams(cell.weight)}</div>
+                <div class="weight">${this.format.weight(cell.weight)}</div>
                 ${this.renderCellControls(cell, this.pieceWeightOf(cell.nfc_id))}
                 <div class="muted" style="font-size: 12px">Вставьте её в свободный слот выше.</div>
               </div>
@@ -448,7 +448,7 @@ export class EmulatorPanel extends LitElement {
 
   private async changeGrams(nfcId: string, grams: number): Promise<void> {
     if (!Number.isFinite(grams) || grams === 0) {
-      this.error = "Укажите, сколько граммов";
+      this.error = "Укажите, на сколько изменить вес";
       return;
     }
     await this.run(`grams-${nfcId}`, () => this.api.addGrams(nfcId, grams));
