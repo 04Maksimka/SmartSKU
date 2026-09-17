@@ -65,6 +65,8 @@ ConsoleCommand ServiceConsole::parse(String line) {
     command.type = ConsoleCommand::Type::Setup;
   } else if (name == "forget") {
     command.type = ConsoleCommand::Type::ForgetBoxId;
+  } else if (name == "reset") {
+    command.type = ConsoleCommand::Type::Reset;
   } else if (name == "t") {
     command.type = parseLocker(args, command.lockerId) ? ConsoleCommand::Type::Tare : ConsoleCommand::Type::Invalid;
   } else {
@@ -96,5 +98,6 @@ void ServiceConsole::printHelp() {
   Serial.println("  s                   status");
   Serial.println("  v                   toggle readings every second");
   Serial.println("  forget              forget box_id and reboot");
+  Serial.println("  reset               forget box_id, zeros and piece weights (keeps network) and reboot");
   Serial.println("  setup               Bluetooth setup mode (same as holding BOOT for 3 s)");
 }

@@ -58,8 +58,13 @@ export class Formatter {
     return value > 0 ? `+${value}` : `−${Math.abs(value)}`;
   }
 
+  /** Slot number printed on the box: locker_id counts from 0, the labels from 1. */
+  slot(lockerId: number): number {
+    return lockerId + 1;
+  }
+
   location(boxName: string, lockerId: number): string {
-    return `${boxName} · слот ${lockerId}`;
+    return `${boxName} · слот ${this.slot(lockerId)}`;
   }
 
   eventLabel(type: InventoryEventType): [string, Tone] {

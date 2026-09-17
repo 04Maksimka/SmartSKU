@@ -9,6 +9,7 @@ import type {
 } from "../api/box-setup-types";
 import { BleBoxLink } from "../app/ble-box-link";
 import type { CommandService } from "../app/command-service";
+import { Formatter } from "../app/formatter";
 import { Theme } from "./theme";
 
 type Step = "intro" | "configure" | "progress";
@@ -255,6 +256,7 @@ export class BoxSetupDialog extends LitElement {
   declare linkLost: boolean;
 
   private readonly link = new BleBoxLink();
+  private readonly format = new Formatter();
   private readonly subscriptions: (() => void)[] = [];
 
   constructor() {
@@ -400,7 +402,7 @@ export class BoxSetupDialog extends LitElement {
         <tbody>
           ${info.lockers.map(
             (locker) => html`<tr>
-              <td>${locker.locker_id}</td>
+              <td>${this.format.slot(locker.locker_id)}</td>
               <td>${this.mark(locker.load_cell)}</td>
               <td>${this.mark(locker.nfc_reader)}</td>
               <td>${locker.display ? "есть" : "—"}</td>

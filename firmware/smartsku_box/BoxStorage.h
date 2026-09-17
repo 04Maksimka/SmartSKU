@@ -18,6 +18,8 @@ public:
   String boxId();
   void saveBoxId(const String &boxId);
   void forgetBoxId();
+  // Стереть всё, кроме настроек сети: box_id, ноли и веса штук. Бокс начнёт с чистого листа, но останется в сети
+  void resetKeepingNetwork();
 
   // Сырые показания HX711 с вставленной пустой ячейкой; false — ноль ещё не выставлялся
   bool loadZero(uint8_t lockerId, double &zeroOffset);

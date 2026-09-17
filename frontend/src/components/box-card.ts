@@ -37,7 +37,7 @@ export class BoxCard extends LitElement {
 
       .grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+        grid-template-columns: repeat(var(--columns), minmax(0, 1fr));
         gap: 10px;
       }
     `,
@@ -70,15 +70,25 @@ export class BoxCard extends LitElement {
           </div>
         </header>
         ${lockers.length
-          ? html`<div class="grid">
+          ? html`<div class="grid" style="--columns: ${this.overview.columns}">
               ${repeat(
                 lockers,
                 (item) => item.locker.locker_id,
-                (item) => html`<sku-locker-tile .overview=${item}></sku-locker-tile>`,
+                (item) =>
+                  html`<sku-locker-tile
+                    .overview=${item}
+                    style=${this.placement(item.locker.locker_id)}
+                  ></sku-locker-tile>`,
               )}
             </div>`
           : html`<div class="empty">Бокс ещё не присылал показания слотов</div>`}
       </section>
     `;
+  }
+
+  /** Fixed cell of the grid, so a slot that has not reported yet leaves a gap instead of shifting the others. */
+  private placement(lockerId: number): string {
+    const columns = this.overview.columns;
+    return `grid-row: ${Math.floor(lockerId / columns) + 1}; grid-column: ${(lockerId % columns) + 1}`;
   }
 }

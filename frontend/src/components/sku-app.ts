@@ -212,7 +212,7 @@ export class SkuApp extends LitElement {
 
   private readonly handleTare = (event: Event): void => {
     const { boxId, lockerId, boxName } = (event as CustomEvent<TareRequest>).detail;
-    const prompt = `Вставлена ли пустая ячейка в слот ${lockerId} бокса ${boxName}? Уберите из неё все предметы и не трогайте примерно 2 секунды после подтверждения.`;
+    const prompt = `Вставлена ли пустая ячейка в слот ${this.format.slot(lockerId)} бокса ${boxName}? Уберите из неё все предметы и не трогайте примерно 2 секунды после подтверждения.`;
     if (!confirm(prompt)) {
       return;
     }

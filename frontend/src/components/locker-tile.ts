@@ -116,7 +116,7 @@ export class LockerTile extends LitElement {
     return html`
       <div class="tile ${locker.nfc_flag ? "" : "out"}">
         <div class="head">
-          <span class="slot">Слот ${locker.locker_id}</span>
+          <span class="slot">Слот ${this.format.slot(locker.locker_id)}</span>
           ${locker.nfc_flag
             ? html`<span class="pill good">● на месте</span>`
             : html`<span class="pill warn">○ извлечена</span>`}
@@ -172,7 +172,7 @@ export class LockerTile extends LitElement {
     return html`
       <div class="tile ${locker.nfc_flag ? "" : "out"}">
         <div class="head">
-          <span class="slot">Слот ${locker.locker_id}</span>
+          <span class="slot">Слот ${this.format.slot(locker.locker_id)}</span>
           <span class="pill warn">⚠ нет нуля</span>
         </div>
         <div class="no-zero">

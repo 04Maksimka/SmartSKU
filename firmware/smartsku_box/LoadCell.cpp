@@ -1,11 +1,6 @@
 #include "LoadCell.h"
 
-#include "AppConfig.h"
-
-LoadCell::LoadCell(int8_t doutPin, int8_t sckPin) : doutPin_(doutPin), sckPin_(sckPin) {}
-
 void LoadCell::begin() {
-  hx_.begin(doutPin_, sckPin_, AppConfig::HX711_GAIN);
   restartWindow();
 }
 
@@ -15,11 +10,12 @@ void LoadCell::restartWindow() {
   windowStartMs_ = millis();
 }
 
+void LoadCell::addSample(int32_t value) {
+  sampleSum_ += value;
+  ++sampleCount_;
+}
+
 bool LoadCell::update() {
-  if (hx_.is_ready()) {
-    sampleSum_ += hx_.read();
-    ++sampleCount_;
-  }
   if (millis() - windowStartMs_ < AppConfig::MEASURE_WINDOW_MS) {
     return false;
   }

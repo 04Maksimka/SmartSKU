@@ -3,19 +3,24 @@
 #include <algorithm>
 #include <cmath>
 
-Locker::Locker(uint8_t lockerId, const LockerHardware &hardware, BoxStorage &storage)
+Locker::Locker(uint8_t lockerId, const LockerHardware &hardware, BoxStorage &storage, LoadCellBus &loadCellBus)
   : id_(lockerId),
     hardware_(hardware),
     invertLoad_(hardware.invertLoad),
     storage_(storage),
-    loadCell_(hardware.hxDout, hardware.hxSck),
-    nfc_(hardware.rfidSs, hardware.rfidRst),
-    display_(hardware.displayClk, hardware.displayDio),
+    loadCellBus_(loadCellBus),
+    nfc_(hardware.rfidSs),
+    display_(AppConfig::DISPLAY_CLK, hardware.displayDio),
     led_(hardware.ledRed, hardware.ledGreen) {}
+
+void Locker::deselectNfc() {
+  nfc_.deselect();
+}
 
 void Locker::begin() {
   display_.begin(AppConfig::DISPLAY_BRIGHTNESS);
   led_.begin();
+  loadCellBus_.attach(hardware_.hxDout, loadCell_);
   loadCell_.begin();
   nfc_.begin(id_);
   hasZero_ = storage_.loadZero(id_, zeroOffset_);
@@ -27,11 +32,14 @@ void Locker::begin() {
 }
 
 void Locker::update() {
-  if (nfc_.update()) {
-    onCellChanged();
-  }
   if (loadCell_.update()) {
     onWindow();
+  }
+}
+
+void Locker::pollNfc() {
+  if (nfc_.update()) {
+    onCellChanged();
   }
 }
 
@@ -62,12 +70,20 @@ void Locker::onWindow() {
   if (loadCell_.failed()) {
     windowReady_ = false;
     display_.showError();
-    Serial.printf("[locker %u] ERROR: no HX711 data, check wiring\n", id_);
+    if (!loadCellFailureLogged_) {
+      loadCellFailureLogged_ = true;
+      Serial.printf("[locker %u] ERROR: no HX711 data, check wiring (slot is not reported until it recovers)\n", id_);
+    }
     return;
   }
   if (!loadCell_.hasSignal()) {
     // Цикл был занят: окно пустое, прошлое среднее остаётся в силе
     return;
+  }
+  if (loadCellFailureLogged_) {
+    loadCellFailureLogged_ = false;
+    Serial.printf("[locker %u] HX711 data is back\n", id_);
+    refreshDisplay();
   }
   windowReady_ = true;
   if (tareWindowsLeft_ > 0) {
@@ -256,13 +272,13 @@ void Locker::fillHardwareInfo(JsonObject info) const {
   info["locker_id"] = id_;
   info["load_cell"] = hardware_.hxDout >= 0 && windowReady_ && !loadCell_.failed();
   info["nfc_reader"] = nfc_.chipFound();
-  info["display"] = hardware_.displayClk >= 0 && hardware_.displayDio >= 0;
+  info["display"] = AppConfig::DISPLAY_CLK >= 0 && hardware_.displayDio >= 0;
   info["led"] = hardware_.ledRed >= 0 || hardware_.ledGreen >= 0;
   info["zeroed"] = hasZero_;
   info["cell"] = nfc_.present() ? nfc_.uid() : String();
 }
 
-void Locker::printStatus() const {
+void Locker::printStatus() {
   Serial.printf(
     "[locker %u] raw %.0f (%lu samples) | net %.0f | weight %.0f | cell %s | piece %.2f | pieces %d", id_, loadCell_.average(),
     static_cast<unsigned long>(loadCell_.lastSampleCount()), net(), reportedWeight_, nfc_.present() ? nfc_.uid().c_str() : "-", pieceWeight_,
@@ -270,6 +286,10 @@ void Locker::printStatus() const {
   );
   if (!hasZero_) {
     Serial.print(" | no zero: send 't'");
+  }
+  Serial.printf(" | %s", nfc_.takeDiagnostics().c_str());
+  if (loadCell_.failed()) {
+    Serial.print(" | no HX711 data");
   }
   if (!nfc_.chipFound()) {
     Serial.print(" | RC522 not found");

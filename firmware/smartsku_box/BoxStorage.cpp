@@ -38,6 +38,12 @@ void BoxStorage::forgetBoxId() {
   prefs_.remove("box_id");
 }
 
+void BoxStorage::resetKeepingNetwork() {
+  NetworkSettings settings = networkSettings();
+  prefs_.clear();
+  saveNetworkSettings(settings);
+}
+
 bool BoxStorage::loadZero(uint8_t lockerId, double &zeroOffset) {
   String key = zeroKey(lockerId);
   if (!prefs_.isKey(key.c_str())) {

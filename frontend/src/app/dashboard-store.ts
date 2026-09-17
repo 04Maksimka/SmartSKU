@@ -13,6 +13,8 @@ export interface LockerOverview {
 export interface BoxOverview {
   box: Box;
   lockers: LockerOverview[];
+  /** Slots per row, as in the physical box. */
+  columns: number;
 }
 
 export interface ComponentOverview {
@@ -146,6 +148,7 @@ export class DashboardStore {
         lockers: overviews
           .filter((item) => item.locker.box_id === box.id)
           .sort((left, right) => left.locker.locker_id - right.locker.locker_id),
+        columns: this.config.boxColumns,
       })),
       components: components.map((component) => ({
         component,

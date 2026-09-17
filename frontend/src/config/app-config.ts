@@ -7,6 +7,8 @@ export interface AppConfig {
   refreshIntervalMs: number;
   eventsLimit: number;
   calibrationsLimit: number;
+  /** Slots per row on a box card, matching the physical box. */
+  boxColumns: number;
 }
 
 export class ConfigLoader {
@@ -22,6 +24,7 @@ export class ConfigLoader {
       refreshIntervalMs: this.positive(raw, "refresh_interval_ms", 1000),
       eventsLimit: this.positive(raw, "events_limit", 200),
       calibrationsLimit: this.positive(raw, "calibrations_limit", 20),
+      boxColumns: this.positive(raw, "box_columns", 2),
     };
   }
 

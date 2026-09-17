@@ -294,7 +294,7 @@ export class EmulatorPanel extends LitElement {
     return html`
       <div class="tile ${cell ? "" : "out"}">
         <div class="tile-head">
-          <span class="slot">Слот ${locker.locker_id}</span>
+          <span class="slot">Слот ${this.format.slot(locker.locker_id)}</span>
           <span class="screen" title="Дисплей ячейки">${locker.screen_number}</span>
         </div>
         ${locker.zeroed ? nothing : html`<span class="pill warn">нет нуля</span>`}

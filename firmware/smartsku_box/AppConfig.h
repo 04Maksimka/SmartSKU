@@ -2,16 +2,14 @@
 
 #include <Arduino.h>
 
-// Железо одной умной ячейки. Пин -1 — компонент не подключён
+// Железо одной умной ячейки. Общие для всех ячеек линии (SCK HX711, CLK дисплеев, RST и SPI считывателей) —
+// в AppConfig. Пин -1 — компонент не подключён
 struct LockerHardware {
   // true, если при нагрузке сырые показания HX711 уменьшаются (перепутаны провода A+/A-)
   bool invertLoad;
   int8_t hxDout;
-  int8_t hxSck;
-  int8_t displayClk;
   int8_t displayDio;
   int8_t rfidSs;
-  int8_t rfidRst;
   int8_t ledRed;
   int8_t ledGreen;
 };
@@ -19,7 +17,7 @@ struct LockerHardware {
 // Настройки прошивки. Сеть и адрес брокера задаются с фронта по Bluetooth и хранятся в NVS (см. NetworkSettings)
 struct AppConfig {
   // Показывается на фронте при подключении бокса
-  static constexpr const char *FIRMWARE_VERSION = "0.4.0";
+  static constexpr const char *FIRMWARE_VERSION = "0.5.0";
   static constexpr unsigned long SERIAL_BAUD = 115200;
   // Встроенный светодиод платы: мигает, пока нет связи с брокером; горит, когда бокс работает
   static constexpr int STATUS_LED_PIN = 2;
@@ -66,15 +64,35 @@ struct AppConfig {
   // Период отладочной строки с показаниями в Serial (включается командой v)
   static constexpr unsigned long DEBUG_LOG_INTERVAL_MS = 1000;
 
-  // Общая SPI-шина RC522; у каждого считывателя свои SS и RST
+  // Общая SPI-шина и общий RST у всех RC522; у каждого считывателя свой SS
   static constexpr int8_t RFID_SCK = 22;
   static constexpr int8_t RFID_MISO = 21;
   static constexpr int8_t RFID_MOSI = 23;
-  static constexpr unsigned long RFID_POLL_INTERVAL_MS = 100;
+  static constexpr int8_t RFID_RST = 16;
+  static constexpr unsigned long RFID_RESET_PULSE_MS = 2;
+  static constexpr unsigned long RFID_RESET_STARTUP_MS = 50;
+  // Считыватели опрашиваются по очереди, по одному за раз: антенна включается только на время опроса, чтобы
+  // соседние считыватели не мешали друг другу. Опрос без метки блокирует цикл на ~30 мс (таймаут RC522),
+  // поэтому между опросами — пауза. Каждый считыватель опрашивается раз в LOCKER_COUNT * интервал
+  static constexpr unsigned long RFID_POLL_INTERVAL_MS = 50;
+  // Метке нужно время, чтобы получить питание от только что включённого поля
+  static constexpr unsigned long RFID_ANTENNA_SETTLE_MS = 5;
   // Столько опросов подряд без метки — и ячейка считается вынутой (защита от случайных пропусков)
   static constexpr uint8_t RFID_MISSES_TO_REMOVE = 3;
+  // Столько опросов подряд с ошибкой связи (не таймаутом) — и считыватель инициализируется заново (~10 с)
+  static constexpr uint8_t RFID_ERRORS_TO_REINIT = 50;
 
-  static constexpr uint8_t HX711_GAIN = 128;
+  // Общий CLK у всех TM1637; у каждого дисплея свой DIO
+  static constexpr int8_t DISPLAY_CLK = 33;
+
+  // Общий SCK у всех HX711: один такт читает все датчики сразу, поэтому они опрашиваются вместе (LoadCellBus).
+  // Канал A, усиление 128 — 25 тактов на чтение
+  static constexpr int8_t HX711_SCK = 32;
+  // Чтение ждёт, пока данные готовы у всех живых датчиков (при 10 Гц — до 100 мс), но не дольше этого
+  static constexpr unsigned long HX711_WAIT_MS = 200;
+  // Датчик, который столько не выдавал данных, больше не ждём (сломан или не подключён); вернётся сам,
+  // когда снова начнёт отвечать
+  static constexpr unsigned long HX711_STALE_MS = 1000;
   // Показания HX711 усредняются по окну такой длины (при 10 Гц это ~5 отсчётов)
   static constexpr unsigned long MEASURE_WINDOW_MS = 500;
   // Столько пустых окон подряд — и HX711 считается отвалившимся (одно пустое окно бывает, когда цикл
@@ -89,9 +107,9 @@ struct AppConfig {
   //
   // Шум: окна, которые отличаются от отправленного веса меньше чем на NOISE_UNITS, не меняют weight в box_data
   // (если при этом не изменилось число штук)
-  static constexpr double NOISE_UNITS = 150;
+  static constexpr double NOISE_UNITS = 400;
   // Калибровка штуки не принимает ячейку легче этого — считается, что её вставили пустой
-  static constexpr double EMPTY_UNITS = 500;
+  static constexpr double EMPTY_UNITS = 1000;
   // После вставки ячейки вес «плывёт»: ячейка не попадает в телеметрию (и не калибруется), пока не будет
   // столько окон подряд с разбросом меньше NOISE_UNITS, но не дольше SETTLE_TIMEOUT_MS
   static constexpr uint8_t STABLE_WINDOWS = 3;
@@ -101,10 +119,14 @@ struct AppConfig {
 
   static constexpr const char *STORAGE_NAMESPACE = "smartsku";
 
-  static constexpr uint8_t LOCKER_COUNT = 1;
-  // Индекс в массиве = locker_id. Ячейка 0 — схема из tenzo_test.ino (ветка master)
+  static constexpr uint8_t LOCKER_COUNT = 4;
+  // Индекс в массиве = locker_id (лоток 1 на плате — locker 0). Схема из four_tray_hardware_test.ino.
+  // Светодиоды висят на расширителе PCF8575 (I2C: SDA 4, SCL 15, адрес 0x20) и пока не используются:
+  // после включения его выходы в HIGH, светодиоды с общим анодом не горят
   static constexpr LockerHardware LOCKERS[LOCKER_COUNT] = {
-    {.invertLoad = false,
-     .hxDout = 36, .hxSck = 32, .displayClk = 33, .displayDio = 25, .rfidSs = 19, .rfidRst = 16, .ledRed = -1, .ledGreen = -1},
+    {.invertLoad = false, .hxDout = 36, .displayDio = 25, .rfidSs = 19, .ledRed = -1, .ledGreen = -1},
+    {.invertLoad = false, .hxDout = 39, .displayDio = 26, .rfidSs = 18, .ledRed = -1, .ledGreen = -1},
+    {.invertLoad = false, .hxDout = 34, .displayDio = 27, .rfidSs = 5, .ledRed = -1, .ledGreen = -1},
+    {.invertLoad = false, .hxDout = 35, .displayDio = 14, .rfidSs = 17, .ledRed = -1, .ledGreen = -1},
   };
 };

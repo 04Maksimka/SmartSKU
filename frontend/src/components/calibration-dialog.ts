@@ -295,7 +295,7 @@ export class CalibrationDialog extends LitElement {
     return html`
       <h2>Насыпьте компоненты</h2>
       <ol>
-        <li>Вытащите ячейку из слота ${calibration.locker_id} бокса ${this.boxName(calibration.box_id)}.</li>
+        <li>Вытащите ячейку из слота ${this.format.slot(calibration.locker_id)} бокса ${this.boxName(calibration.box_id)}.</li>
         <li>Насыпьте ровно ${calibration.num_of_pieces} шт. «${calibration.name}».</li>
         <li>Вставьте ячейку обратно — остальное бокс посчитает сам.</li>
       </ol>

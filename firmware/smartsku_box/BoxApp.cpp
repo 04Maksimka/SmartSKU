@@ -14,10 +14,11 @@ BoxApp::BoxApp()
     mqtt_("box-" + hardwareId_),
     statusLed_(AppConfig::STATUS_LED_PIN),
     setupButton_(AppConfig::SETUP_BUTTON_PIN, AppConfig::SETUP_HOLD_MS),
+    loadCellBus_(AppConfig::HX711_SCK),
     bleChannel_(AppConfig::BLE_NAME_PREFIX + hardwareId_.substring(hardwareId_.length() - 4)),
     setup_(hardwareId_, bleChannel_, wifi_, mqtt_, lockers_) {
   for (uint8_t id = 0; id < AppConfig::LOCKER_COUNT; ++id) {
-    lockers_.push_back(std::make_unique<Locker>(id, AppConfig::LOCKERS[id], storage_));
+    lockers_.push_back(std::make_unique<Locker>(id, AppConfig::LOCKERS[id], storage_, loadCellBus_));
   }
 }
 
@@ -38,10 +39,15 @@ void BoxApp::begin() {
   console_.begin();
   setupButton_.begin();
 
+  for (auto &locker : lockers_) {
+    locker->deselectNfc();
+  }
+  NfcReader::hardResetAll(AppConfig::RFID_RST);
   SPI.begin(AppConfig::RFID_SCK, AppConfig::RFID_MISO, AppConfig::RFID_MOSI);
   for (auto &locker : lockers_) {
     locker->begin();
   }
+  loadCellBus_.begin();
   ServiceConsole::printHelp();
 
   mqtt_.begin([this](const String &topic, const String &payload) {
@@ -113,9 +119,11 @@ void BoxApp::update() {
     }
   }
 
+  loadCellBus_.update();
   for (auto &locker : lockers_) {
     locker->update();
   }
+  pollNextNfc();
   handleConsole(console_.poll());
 
   unsigned long now = millis();
@@ -137,6 +145,17 @@ void BoxApp::update() {
     }
   }
   updateStatusLed(online);
+}
+
+// Опрос считывателя без метки блокирует цикл до таймаута RC522, поэтому за цикл — не больше одного
+void BoxApp::pollNextNfc() {
+  unsigned long now = millis();
+  if (lockers_.empty() || now - lastNfcPollMs_ < AppConfig::RFID_POLL_INTERVAL_MS) {
+    return;
+  }
+  lastNfcPollMs_ = now;
+  lockers_[nfcTurn_]->pollNfc();
+  nfcTurn_ = (nfcTurn_ + 1) % lockers_.size();
 }
 
 void BoxApp::startProvisioning() {
@@ -306,6 +325,12 @@ void BoxApp::handleConsole(const ConsoleCommand &command) {
     case ConsoleCommand::Type::ForgetBoxId:
       Serial.println("[app] box_id forgotten, rebooting");
       storage_.forgetBoxId();
+      Serial.flush();
+      ESP.restart();
+      break;
+    case ConsoleCommand::Type::Reset:
+      Serial.println("[app] box_id, zeros and piece weights erased, rebooting");
+      storage_.resetKeepingNetwork();
       Serial.flush();
       ESP.restart();
       break;

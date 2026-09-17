@@ -8,6 +8,7 @@
 #include "CountDisplay.h"
 #include "IndicatorLed.h"
 #include "LoadCell.h"
+#include "LoadCellBus.h"
 #include "NfcReader.h"
 
 // Умная ячейка: тензодатчик + NFC + дисплей + светодиод.
@@ -16,10 +17,15 @@
 // Вес — в условных единицах (сырые отсчёты HX711 минус ноль), см. AppConfig
 class Locker {
 public:
-  Locker(uint8_t lockerId, const LockerHardware &hardware, BoxStorage &storage);
+  Locker(uint8_t lockerId, const LockerHardware &hardware, BoxStorage &storage, LoadCellBus &loadCellBus);
 
+  // До SPI.begin() и до begin() любой ячейки
+  void deselectNfc();
   void begin();
+  // Каждый цикл, после LoadCellBus::update()
   void update();
+  // Один опрос NFC; считыватели опрашиваются по очереди, расписание — в BoxApp
+  void pollNfc();
 
   uint8_t id() const {
     return id_;
@@ -36,7 +42,7 @@ public:
   void fillReading(JsonObject reading) const;
   // Что из железа ячейки отвечает — для фронта при подключении бокса
   void fillHardwareInfo(JsonObject info) const;
-  void printStatus() const;
+  void printStatus();
 
   // Команды бэкенда
   void startCalibration(int numOfPieces);
@@ -68,6 +74,7 @@ private:
   const LockerHardware hardware_;
   const bool invertLoad_;
   BoxStorage &storage_;
+  LoadCellBus &loadCellBus_;
   LoadCell loadCell_;
   NfcReader nfc_;
   CountDisplay display_;
@@ -80,6 +87,7 @@ private:
   double tareSum_ = 0;
   bool tareDone_ = false;
   bool windowReady_ = false;
+  bool loadCellFailureLogged_ = false;
   // Вес, который уходит в box_data и на дисплей: меняется, только когда сдвиг больше шума (гистерезис)
   double reportedWeight_ = 0;
   double pieceWeight_ = 0;

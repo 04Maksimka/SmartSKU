@@ -8,6 +8,7 @@
 #include "BleSetupChannel.h"
 #include "BoxStorage.h"
 #include "HoldButton.h"
+#include "LoadCellBus.h"
 #include "Locker.h"
 #include "MqttLink.h"
 #include "NetworkSettings.h"
@@ -49,6 +50,7 @@ private:
   void startTare(Locker &locker);
   void printStatus();
   void updateStatusLed(bool online);
+  void pollNextNfc();
 
   const String hardwareId_;
   BoxStorage storage_;
@@ -57,6 +59,7 @@ private:
   StatusLed statusLed_;
   ServiceConsole console_;
   HoldButton setupButton_;
+  LoadCellBus loadCellBus_;
   std::vector<std::unique_ptr<Locker>> lockers_;
   BleSetupChannel bleChannel_;
   SetupController setup_;
@@ -69,5 +72,8 @@ private:
   unsigned long lastProvisionRequestMs_ = 0;
   unsigned long lastTelemetryMs_ = 0;
   unsigned long lastDebugLogMs_ = 0;
+  // Чей считыватель опрашивать следующим
+  size_t nfcTurn_ = 0;
+  unsigned long lastNfcPollMs_ = 0;
   bool verbose_ = true;
 };

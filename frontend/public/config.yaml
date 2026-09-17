@@ -9,3 +9,6 @@ refresh_interval_ms: 1000
 events_limit: 200
 # How many latest calibrations are listed
 calibrations_limit: 20
+# Slots on a box card are laid out like in the real box, seen from the front: locker_id 0, 1, ... left to right,
+# top to bottom, this many per row. The prototype box is 2x2: slots 1 2 / 3 4 (labels are locker_id + 1)
+box_columns: 2
