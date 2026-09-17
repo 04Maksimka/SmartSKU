@@ -33,6 +33,7 @@ class LockerSchema(BaseModel):
     nfc_id: str | None
     weight: float
     quantity: int | None
+    zeroed: bool
     updated_at: datetime
     component: ComponentSchema | None
 

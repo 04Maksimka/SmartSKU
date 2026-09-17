@@ -204,7 +204,7 @@ export class SkuApp extends LitElement {
     this.actionNotice = null;
     void this.run(async () => {
       await this.commands.tare(boxId, lockerId);
-      this.actionNotice = `Команда отправлена боксу ${boxName}. Держите пустую ячейку неподвижно около 2 секунд; после установки нуля слот появится в интерфейсе.`;
+      this.actionNotice = `Команда отправлена боксу ${boxName}. Держите пустую ячейку в слоте ${lockerId} неподвижно около 2 секунд, после этого предупреждение о нуле пропадёт.`;
     });
   };
 

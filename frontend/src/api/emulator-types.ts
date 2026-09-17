@@ -11,6 +11,7 @@ export interface EmulatorLocker {
   cell: EmulatorCell | null;
   calibrated_piece_weight: number | null;
   pending_calibration: number | null;
+  zeroed: boolean;
   led_color: string;
   screen_number: number;
 }

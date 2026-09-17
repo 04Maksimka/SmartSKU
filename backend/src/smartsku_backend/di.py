@@ -13,8 +13,8 @@ from smartsku_backend.services.indicators import IndicatorPolicy
 from smartsku_backend.services.inventory import ComponentService, InventoryQueryService
 from smartsku_backend.services.provisioning import ProvisioningService
 from smartsku_backend.services.runtime_cache import LockerRuntimeCache
-from smartsku_backend.services.telemetry import TelemetryService
 from smartsku_backend.services.tare import TareService
+from smartsku_backend.services.telemetry import TelemetryService
 
 
 class ConfigProvider(Provider):

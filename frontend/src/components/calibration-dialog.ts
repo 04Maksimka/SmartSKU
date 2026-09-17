@@ -313,7 +313,9 @@ export class CalibrationDialog extends LitElement {
   }
 
   private freeLockers(): LockerOverview[] {
-    return this.lockers.filter((item) => item.locker.component === null && item.pendingCalibration === null);
+    return this.lockers.filter(
+      (item) => item.locker.zeroed && item.locker.component === null && item.pendingCalibration === null,
+    );
   }
 
   private boxName(boxId: string): string {

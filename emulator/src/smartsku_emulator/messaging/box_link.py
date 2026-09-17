@@ -15,6 +15,7 @@ from smartsku_emulator.messaging.contracts import (
     IndicatorsCommand,
     ProvisionRequest,
     ProvisionResponse,
+    TareCommand,
 )
 from smartsku_emulator.messaging.topics import MqttTopics
 
@@ -24,8 +25,8 @@ logger = logging.getLogger(__name__)
 class BoxLink:
     """The MQTT side of one emulated ESP32: provisioning, periodic telemetry, command handling."""
 
-    COMMAND_ADAPTER: TypeAdapter[CalibrationCommand | IndicatorsCommand] = TypeAdapter(
-        Annotated[CalibrationCommand | IndicatorsCommand, Field(discriminator="command")]
+    COMMAND_ADAPTER: TypeAdapter[CalibrationCommand | TareCommand | IndicatorsCommand] = TypeAdapter(
+        Annotated[CalibrationCommand | TareCommand | IndicatorsCommand, Field(discriminator="command")]
     )
 
     def __init__(
@@ -102,6 +103,9 @@ class BoxLink:
                 if isinstance(command, CalibrationCommand):
                     self._box.apply_calibration(command.locker_id, command.num_of_pieces)
                     logger.info("Box %s locker %s awaits calibration", command.box_id, command.locker_id)
+                elif isinstance(command, TareCommand):
+                    self._box.apply_tare(command.locker_id)
+                    logger.info("Box %s locker %s zero set", command.box_id, command.locker_id)
                 else:
                     self._box.apply_indicators(command.locker_id, command.led_color, command.screen_number)
             except (ValidationError, ValueError, EmulatorError) as error:

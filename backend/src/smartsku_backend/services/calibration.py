@@ -37,6 +37,8 @@ class CalibrationService:
         state = await self._session.get(LockerState, (box_id, locker_id))
         if state is None:
             raise NotFoundError(f"Locker {locker_id} of box {box_id} has not reported yet")
+        if not state.zeroed:
+            raise ConflictError(f"Locker {locker_id} of box {box_id} has no zero, set it before calibration")
         if state.nfc_id and await self._session.get(Component, state.nfc_id) is not None:
             raise ConflictError(f"Locker {locker_id} of box {box_id} holds a calibrated cell, release it first")
 

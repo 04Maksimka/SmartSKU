@@ -20,6 +20,7 @@ class LockerRuntimeCache:
             previous.nfc_flag != reading.nfc_flag
             or previous.nfc_id != reading.nfc_id
             or previous.piece_weight != reading.piece_weight
+            or previous.zeroed != reading.zeroed
             or abs(previous.weight - reading.weight) >= weight_threshold
         )
 

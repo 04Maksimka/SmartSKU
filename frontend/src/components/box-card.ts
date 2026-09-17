@@ -1,7 +1,6 @@
 import { LitElement, css, html } from "lit";
 import { repeat } from "lit/directives/repeat.js";
 
-import { DashboardEvents } from "../app/dashboard-events";
 import type { BoxOverview } from "../app/dashboard-store";
 import { Formatter } from "../app/formatter";
 import { Theme } from "./theme";
@@ -47,11 +46,11 @@ export class BoxCard extends LitElement {
   declare overview: BoxOverview;
 
   private readonly format = new Formatter();
-  private readonly events = new DashboardEvents();
 
   protected override render() {
     const { box, lockers } = this.overview;
     const since = box.status_changed_at ? ` с ${this.format.moment(box.status_changed_at)}` : "";
+    const unzeroed = lockers.filter((item) => !item.locker.zeroed).length;
     return html`
       <section class="card">
         <header>
@@ -60,11 +59,11 @@ export class BoxCard extends LitElement {
             <div class="muted mono">box_id ${box.id}</div>
           </div>
           <div class="actions">
-            ${box.hardware_id.startsWith("emu-") ? "" : html`<button
-              ?disabled=${!box.online}
-              title="Обнулить вес пустой ячейки в слоте 0"
-              @click=${() => this.events.tare(this, { boxId: box.id, lockerId: 0, boxName: box.hardware_id })}
-            >Установить ноль</button>`}
+            ${unzeroed
+              ? html`<span class="pill warn" title="В этих слотах не установлен ноль: учёт по ним не ведётся">
+                  ⚠ без нуля: ${unzeroed}
+                </span>`
+              : ""}
             <span class="pill ${box.online ? "good" : "bad"}" title="Статус${since}">
               ${box.online ? "● в сети" : "○ не в сети"}
             </span>

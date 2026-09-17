@@ -21,7 +21,7 @@ void Locker::begin() {
   if (hasZero_) {
     Serial.printf("[locker %u] zero: %.0f\n", id_, zeroOffset_);
   } else {
-    Serial.printf("[locker %u] no zero yet: insert the EMPTY cell and send 't'\n", id_);
+    Serial.printf("[locker %u] no zero yet: insert the EMPTY cell and set zero from the dashboard (or send 't')\n", id_);
   }
 }
 
@@ -192,6 +192,10 @@ void Locker::refreshDisplay() {
   if (tareWindowsLeft_ > 0) {
     return;
   }
+  if (!hasZero_) {
+    display_.showDashes();
+    return;
+  }
   if (backendOnline_ && hasScreenNumber_) {
     display_.showNumber(screenNumber_);
     return;
@@ -230,6 +234,7 @@ void Locker::fillReading(JsonObject reading) const {
   reading["weight"] = present ? std::round(reportedWeight_ * 10) / 10 : 0.0;
   reading["piece_weight"] = present ? std::round(pieceWeight_ * 100) / 100 : 0.0;
   reading["number_of_pieces"] = present ? pieces() : 0;
+  reading["zeroed"] = hasZero_;
 }
 
 void Locker::printStatus() const {

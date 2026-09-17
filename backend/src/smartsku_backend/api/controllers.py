@@ -49,6 +49,7 @@ class BoxesController:
                 nfc_id=state.nfc_id,
                 weight=state.weight,
                 quantity=state.quantity,
+                zeroed=state.zeroed,
                 updated_at=state.updated_at,
                 component=ComponentSchema.model_validate(component) if component else None,
             )

@@ -10,6 +10,7 @@ class LockerReading(BaseModel):
     weight: float
     piece_weight: float
     number_of_pieces: int
+    zeroed: bool
 
 
 class BoxDataMessage(BaseModel):
@@ -22,6 +23,12 @@ class CalibrationCommand(BaseModel):
     box_id: str
     locker_id: int
     num_of_pieces: int
+
+
+class TareCommand(BaseModel):
+    command: Literal["tare"]
+    box_id: str
+    locker_id: int
 
 
 class IndicatorsCommand(BaseModel):

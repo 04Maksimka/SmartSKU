@@ -24,6 +24,8 @@ export interface Locker {
   nfc_id: string | null;
   weight: number;
   quantity: number | null;
+  /** False until the slot's zero (empty cell weight) is set; weight is 0 until then. */
+  zeroed: boolean;
   updated_at: string;
   component: Component | null;
 }

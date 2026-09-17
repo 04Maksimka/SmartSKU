@@ -24,9 +24,10 @@ public:
   uint8_t id() const {
     return id_;
   }
-  // Ноль выставлен, вес измерен и не «плывёт» после вставки; иначе ячейку не стоит отправлять в телеметрию
+  // Вес измерен и не «плывёт» после вставки, ноль сейчас не устанавливается; иначе ячейку не стоит отправлять
+  // в телеметрию. Слот без нуля отправляется с zeroed=false и нулевым весом, чтобы фронт предупредил о нём
   bool ready() const {
-    return hasZero_ && tareWindowsLeft_ == 0 && windowReady_ && settled_;
+    return tareWindowsLeft_ == 0 && windowReady_ && settled_;
   }
   void fillReading(JsonObject reading) const;
   void printStatus() const;

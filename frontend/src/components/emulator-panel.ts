@@ -292,6 +292,7 @@ export class EmulatorPanel extends LitElement {
           <span class="slot">Слот ${locker.locker_id}</span>
           <span class="screen" title="Дисплей ячейки">${locker.screen_number}</span>
         </div>
+        ${locker.zeroed ? nothing : html`<span class="pill warn">нет нуля</span>`}
         ${locker.pending_calibration !== null
           ? html`<span class="pill warn">ждёт ${locker.pending_calibration} шт</span>`
           : nothing}

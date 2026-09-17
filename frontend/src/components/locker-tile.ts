@@ -81,7 +81,8 @@ export class LockerTile extends LitElement {
         text-align: right;
       }
 
-      .pending {
+      .pending,
+      .no-zero {
         padding: 8px 10px;
         border-radius: 8px;
         font-size: 13px;
@@ -109,6 +110,9 @@ export class LockerTile extends LitElement {
 
   protected override render() {
     const { locker, pendingCalibration } = this.overview;
+    if (!locker.zeroed) {
+      return this.renderWithoutZero();
+    }
     return html`
       <div class="tile ${locker.nfc_flag ? "" : "out"}">
         <div class="head">
@@ -156,11 +160,50 @@ export class LockerTile extends LitElement {
         Освободить
       </button>`;
     }
+    return html`
+      ${locker.nfc_flag ? this.renderTareButton("") : nothing}
+      <button class="primary" @click=${() => this.events.calibrate(this, this.overview)}>Откалибровать</button>
+    `;
+  }
+
+  /** Until the zero is set the weight is meaningless: no accounting and no calibration, only the tare action. */
+  private renderWithoutZero() {
+    const { locker } = this.overview;
+    return html`
+      <div class="tile ${locker.nfc_flag ? "" : "out"}">
+        <div class="head">
+          <span class="slot">Слот ${locker.locker_id}</span>
+          <span class="pill warn">⚠ нет нуля</span>
+        </div>
+        <div class="no-zero">
+          Ноль не установлен, учёт по слоту не ведётся.
+          ${locker.nfc_flag
+            ? "Уберите всё из ячейки и нажмите «Установить ноль»."
+            : "Вставьте пустую ячейку, затем установите ноль."}
+        </div>
+        ${locker.nfc_flag
+          ? html`<dl>
+              <dt>Ячейка</dt>
+              <dd class="mono">${locker.nfc_id}</dd>
+            </dl>`
+          : nothing}
+        <div class="footer">
+          <span class="muted">обновлено ${this.format.time(locker.updated_at)}</span>
+          ${this.renderTareButton("primary")}
+        </div>
+      </div>
+    `;
+  }
+
+  private renderTareButton(variant: string) {
+    const { locker, boxName } = this.overview;
     return html`<button
-      class="primary"
-      @click=${() => this.events.calibrate(this, this.overview)}
+      class=${variant}
+      ?disabled=${!locker.nfc_flag}
+      title=${locker.nfc_flag ? "Запомнить вес пустой ячейки как ноль" : "Сначала вставьте пустую ячейку"}
+      @click=${() => this.events.tare(this, { boxId: locker.box_id, lockerId: locker.locker_id, boxName })}
     >
-      Откалибровать
+      Установить ноль
     </button>`;
   }
 

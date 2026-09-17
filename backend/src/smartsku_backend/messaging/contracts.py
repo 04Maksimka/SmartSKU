@@ -17,6 +17,8 @@ class LockerReading(BaseModel):
     weight: float
     piece_weight: float
     number_of_pieces: int
+    # False until the slot's zero (empty cell weight) is set; weight is meaningless until then
+    zeroed: bool = True
 
     @field_validator("nfc_id")
     @classmethod

@@ -67,9 +67,12 @@ class TelemetryService:
                 box_id=box_id, locker_id=reading.locker_id, nfc_flag=False, weight=0.0, reported_piece_weight=0.0
             )
             self._session.add(state)
+        if not reading.zeroed:
+            return self._apply_unzeroed(state, reading)
 
-        inserted = reading.nfc_flag and (not state.nfc_flag or state.nfc_id != reading.nfc_id)
-        removed = state.nfc_flag and (not reading.nfc_flag or state.nfc_id != reading.nfc_id)
+        # A slot that just got its zero starts accounting as if its cell had been inserted.
+        inserted = reading.nfc_flag and (not state.nfc_flag or state.nfc_id != reading.nfc_id or not state.zeroed)
+        removed = state.nfc_flag and state.zeroed and (not reading.nfc_flag or state.nfc_id != reading.nfc_id)
 
         if removed:
             removed_component = await self._find_component(state.nfc_id)
@@ -118,8 +121,20 @@ class TelemetryService:
         state.weight = reading.weight
         state.reported_piece_weight = reading.piece_weight
         state.quantity = quantity
+        state.zeroed = True
         state.updated_at = datetime.now(UTC)
         return self._indicator_policy.build(box_id, reading.locker_id, reading.nfc_flag, quantity)
+
+    def _apply_unzeroed(self, state: LockerState, reading: LockerReading) -> IndicatorsCommand:
+        """Without a zero the weight means nothing: track only cell presence and log no inventory events."""
+        state.nfc_flag = reading.nfc_flag
+        state.nfc_id = reading.nfc_id if reading.nfc_flag else None
+        state.weight = 0.0
+        state.reported_piece_weight = reading.piece_weight
+        state.quantity = None
+        state.zeroed = False
+        state.updated_at = datetime.now(UTC)
+        return self._indicator_policy.build(state.box_id, state.locker_id, reading.nfc_flag, None)
 
     async def _complete_pending_calibration(
         self, box_id: str, reading: LockerReading, component: Component | None

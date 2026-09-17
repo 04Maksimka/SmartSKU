@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from enum import StrEnum
 
-from sqlalchemy import JSON, DateTime, Dialect, Enum, Float, ForeignKey, Integer, String, TypeDecorator
+from sqlalchemy import JSON, DateTime, Dialect, Enum, Float, ForeignKey, Integer, String, TypeDecorator, true
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -60,6 +60,7 @@ class LockerState(Base):
     weight: Mapped[float] = mapped_column(Float, default=0.0)
     reported_piece_weight: Mapped[float] = mapped_column(Float, default=0.0)
     quantity: Mapped[int | None] = mapped_column(Integer)
+    zeroed: Mapped[bool] = mapped_column(default=True, server_default=true())
     updated_at: Mapped[datetime] = mapped_column(UtcDateTime, default=lambda: datetime.now(UTC))
 
 

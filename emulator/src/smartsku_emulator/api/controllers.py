@@ -82,6 +82,7 @@ class FleetController:
                     cell=self._cell_view(locker.cell) if locker.cell else None,
                     calibrated_piece_weight=box.piece_weights.get(locker.cell.nfc_id) if locker.cell else None,
                     pending_calibration=locker.pending_calibration,
+                    zeroed=locker.zero_offset is not None,
                     led_color=locker.led_color,
                     screen_number=locker.screen_number,
                 )

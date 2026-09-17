@@ -13,6 +13,7 @@ class TestFleet:
         fleet.add_box(VirtualBox("hw-1", lockers_count=4, box_id="box-1"))
         fleet.create_cell("cell-1")
         fleet.insert("hw-1", 0, "cell-1")
+        fleet.box("hw-1").apply_tare(0)
         return fleet
 
     def test_new_cell_is_empty_and_uncalibrated(self) -> None:
@@ -43,6 +44,36 @@ class TestFleet:
         with pytest.raises(ConflictError):
             self._fleet().add_pieces("cell-1", 1)
 
+    def test_new_slot_has_no_zero_until_tare(self) -> None:
+        fleet = Fleet()
+        box = VirtualBox("hw-2", lockers_count=2, box_id="box-2")
+        fleet.add_box(box)
+        fleet.create_cell("cell-2")
+        with pytest.raises(ConflictError):
+            box.apply_tare(0)
+        fleet.insert("hw-2", 0, "cell-2")
+        fleet.add_grams("cell-2", 30.0)
+
+        reading = box.readings(noise_grams=0.0)[0]
+        assert (reading.zeroed, reading.nfc_flag, reading.weight) == (False, True, 0.0)
+        assert box.readings(noise_grams=0.0)[1].zeroed is False
+
+        box.apply_tare(0)
+        assert (box.readings(noise_grams=0.0)[0].zeroed, box.readings(noise_grams=0.0)[0].weight) == (True, 0.0)
+        fleet.add_grams("cell-2", 20.0)
+        assert box.readings(noise_grams=0.0)[0].weight == 20.0
+
+    def test_calibration_waits_for_zero(self) -> None:
+        fleet = Fleet()
+        box = VirtualBox("hw-2", lockers_count=1, box_id="box-2")
+        fleet.add_box(box)
+        fleet.create_cell("cell-2")
+        fleet.add_grams("cell-2", 50.0)
+        box.apply_calibration(0, 10)
+        fleet.insert("hw-2", 0, "cell-2")
+        assert box.piece_weights == {}
+        assert box.lockers[0].pending_calibration == 10
+
     def test_pulled_out_cell_reads_as_empty_locker(self) -> None:
         fleet = self._fleet()
         fleet.pull_out("hw-1", 0)
@@ -70,6 +101,7 @@ class TestFleetState:
         fleet.add_box(VirtualBox("hw-1", lockers_count=4, box_id="box-1"))
         fleet.create_cell("cell-1")
         fleet.insert("hw-1", 0, "cell-1")
+        fleet.box("hw-1").apply_tare(0)
         return fleet, store
 
     def test_state_survives_restart(self, tmp_path: Path) -> None:
@@ -106,3 +138,20 @@ class TestFleetState:
         restarted = Fleet()
         restarted.restore(state)
         assert restarted.box("hw-1").lockers[0].pending_calibration == 10
+
+    def test_zero_survives_restart_and_old_state_counts_as_zeroed(self, tmp_path: Path) -> None:
+        fleet, _ = self._stored_fleet(tmp_path / "state.json")
+        fleet.box("hw-1").lockers[1].zero_offset = None
+        fleet.box("hw-1").apply_calibration(0, 10)
+
+        state = FleetStateStore(tmp_path / "state.json").load()
+        assert state is not None
+        restarted = Fleet()
+        restarted.restore(state)
+        assert [locker.zero_offset for locker in restarted.box("hw-1").lockers.values()][:2] == [0.0, None]
+
+        for locker_data in state["boxes"][0]["lockers"]:
+            del locker_data["zero_offset"]
+        legacy = Fleet()
+        legacy.restore(state)
+        assert all(locker.zero_offset == 0.0 for locker in legacy.box("hw-1").lockers.values())

@@ -7,7 +7,8 @@
             "nfc_id": "fjugdurg",
             "weight": 100.0,
             "piece_weight": 10.0,
-            "number_of_pieces": 10
+            "number_of_pieces": 10,
+            "zeroed": true
         },
         {
             "locker_id": 1,
@@ -15,7 +16,8 @@
             "nfc_id": "mfkmdjgna",
             "weight": 150.0,
             "piece_weight": 5.0,
-            "number_of_pieces": 30
+            "number_of_pieces": 30,
+            "zeroed": true
         }
     ]
 }

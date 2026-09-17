@@ -30,12 +30,17 @@ class VirtualCell:
 
 
 class VirtualLocker:
-    """A load cell slot inside a box, with its LED and display."""
+    """A load cell slot inside a box, with its LED and display.
+
+    Like the firmware, a new slot has no zero: until the empty cell is tared it reports zeroed=false and weight 0.
+    The zero is the cell weight at the moment of taring, so taring a filled cell hides its contents.
+    """
 
     def __init__(self, locker_id: int) -> None:
         self.locker_id = locker_id
         self.cell: VirtualCell | None = None
         self.pending_calibration: int | None = None
+        self.zero_offset: float | None = None
         self.led_color = "none"
         self.screen_number = 0
 
@@ -64,9 +69,10 @@ class VirtualBox:
         if locker.cell is not None:
             raise ConflictError(f"Locker {locker_id} of box {self.hardware_id} already holds {locker.cell.nfc_id}")
         locker.cell = cell
-        if locker.pending_calibration is None:
+        if locker.pending_calibration is None or locker.zero_offset is None:
             return
-        if cell.weight <= 0:
+        weight = self._net_weight(locker)
+        if weight <= 0:
             logger.warning(
                 "Box %s locker %s: cell %s inserted empty, calibration still waits for components",
                 self.hardware_id,
@@ -74,7 +80,7 @@ class VirtualBox:
                 cell.nfc_id,
             )
             return
-        self.piece_weights[cell.nfc_id] = cell.weight / locker.pending_calibration
+        self.piece_weights[cell.nfc_id] = weight / locker.pending_calibration
         locker.pending_calibration = None
         self._store.record()
 
@@ -87,6 +93,13 @@ class VirtualBox:
 
     def apply_calibration(self, locker_id: int, num_of_pieces: int) -> None:
         self.locker(locker_id).pending_calibration = num_of_pieces
+        self._store.record()
+
+    def apply_tare(self, locker_id: int) -> None:
+        locker = self.locker(locker_id)
+        if locker.cell is None:
+            raise ConflictError(f"Locker {locker_id} of box {self.hardware_id}: insert the empty cell before taring")
+        locker.zero_offset = locker.cell.weight
         self._store.record()
 
     def apply_indicators(self, locker_id: int, led_color: str, screen_number: int) -> None:
@@ -105,6 +118,7 @@ class VirtualBox:
                     "locker_id": locker.locker_id,
                     "nfc_id": locker.cell.nfc_id if locker.cell else None,
                     "pending_calibration": locker.pending_calibration,
+                    "zero_offset": locker.zero_offset,
                 }
                 for locker in self.lockers.values()
             ],
@@ -122,11 +136,26 @@ class VirtualBox:
                         weight=0.0,
                         piece_weight=0.0,
                         number_of_pieces=0,
+                        zeroed=locker.zero_offset is not None,
                     )
                 )
                 continue
-            weight = max(0.0, locker.cell.weight + (random.gauss(0.0, noise_grams) if noise_grams > 0 else 0.0))
             piece_weight = self.piece_weights.get(locker.cell.nfc_id, 0.0)
+            if locker.zero_offset is None:
+                readings.append(
+                    LockerReading(
+                        locker_id=locker.locker_id,
+                        nfc_flag=True,
+                        nfc_id=locker.cell.nfc_id,
+                        weight=0.0,
+                        piece_weight=round(piece_weight, 4),
+                        number_of_pieces=0,
+                        zeroed=False,
+                    )
+                )
+                continue
+            noise = random.gauss(0.0, noise_grams) if noise_grams > 0 else 0.0
+            weight = max(0.0, self._net_weight(locker) + noise)
             readings.append(
                 LockerReading(
                     locker_id=locker.locker_id,
@@ -135,9 +164,15 @@ class VirtualBox:
                     weight=round(weight, 2),
                     piece_weight=round(piece_weight, 4),
                     number_of_pieces=round(weight / piece_weight) if piece_weight > 0 else 0,
+                    zeroed=True,
                 )
             )
         return readings
+
+    def _net_weight(self, locker: VirtualLocker) -> float:
+        if locker.cell is None or locker.zero_offset is None:
+            return 0.0
+        return max(0.0, locker.cell.weight - locker.zero_offset)
 
 
 class Fleet:
@@ -221,6 +256,7 @@ class Fleet:
             for locker_data in box_data.get("lockers", []):
                 locker = box.locker(int(locker_data["locker_id"]))
                 locker.pending_calibration = locker_data.get("pending_calibration")
+                locker.zero_offset = locker_data.get("zero_offset", 0.0)
                 nfc_id = locker_data.get("nfc_id")
                 if nfc_id is not None and nfc_id in cells:
                     locker.cell = cells[nfc_id]

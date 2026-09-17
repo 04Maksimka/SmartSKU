@@ -12,6 +12,7 @@ class LockerView(BaseModel):
     cell: CellView | None
     calibrated_piece_weight: float | None
     pending_calibration: int | None
+    zeroed: bool = Field(description="false: the slot has no zero yet and reports weight 0")
     led_color: str
     screen_number: int
 
