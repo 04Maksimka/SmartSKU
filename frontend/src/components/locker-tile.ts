@@ -117,9 +117,7 @@ export class LockerTile extends LitElement {
       <div class="tile ${locker.nfc_flag ? "" : "out"}">
         <div class="head">
           <span class="slot">Слот ${this.format.slot(locker.locker_id)}</span>
-          ${locker.nfc_flag
-            ? html`<span class="pill good">● на месте</span>`
-            : html`<span class="pill warn">○ извлечена</span>`}
+          ${this.renderPresence()}
         </div>
         ${pendingCalibration
           ? html`<div class="pending">
@@ -173,26 +171,36 @@ export class LockerTile extends LitElement {
       <div class="tile ${locker.nfc_flag ? "" : "out"}">
         <div class="head">
           <span class="slot">Слот ${this.format.slot(locker.locker_id)}</span>
-          <span class="pill warn">⚠ нет нуля</span>
+          ${this.renderPresence()}
         </div>
         <div class="no-zero">
-          Ноль не установлен, учёт по слоту не ведётся.
+          ⚠ Ноль не установлен, вес и количество не считаются.
           ${locker.nfc_flag
             ? "Уберите всё из ячейки и нажмите «Установить ноль»."
             : "Вставьте пустую ячейку, затем установите ноль."}
         </div>
         ${locker.nfc_flag
-          ? html`<dl>
-              <dt>Ячейка</dt>
-              <dd class="mono">${locker.nfc_id}</dd>
-            </dl>`
-          : nothing}
+          ? html`<div class="name ${locker.component ? "" : "muted"}">
+                ${locker.component?.name ?? "Не откалибрована"}
+              </div>
+              <dl>
+                <dt>Ячейка</dt>
+                <dd class="mono">${locker.nfc_id}</dd>
+              </dl>`
+          : this.renderPulledOut()}
         <div class="footer">
           <span class="muted">обновлено ${this.format.time(locker.updated_at)}</span>
           ${this.renderTareButton("primary")}
         </div>
       </div>
     `;
+  }
+
+  /** Presence comes from the NFC tag alone: it does not need a zero or a calibration. */
+  private renderPresence() {
+    return this.overview.locker.nfc_flag
+      ? html`<span class="pill good">● на месте</span>`
+      : html`<span class="pill warn">○ извлечена</span>`;
   }
 
   private renderTareButton(variant: string) {

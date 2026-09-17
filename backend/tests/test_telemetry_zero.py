@@ -61,15 +61,32 @@ class TestTelemetryWithoutZero:
         )
         return BoxDataMessage(box_id="box", lockers=[reading])
 
-    async def test_unzeroed_slot_is_shown_but_not_accounted(self, session: AsyncSession) -> None:
-        await self._service(session).handle(self._message(weight=0.0, zeroed=False))
+    def _pulled_out(self, zeroed: bool) -> BoxDataMessage:
+        reading = LockerReading(
+            locker_id=0, nfc_flag=False, nfc_id="", weight=0.0, piece_weight=0.0, number_of_pieces=0, zeroed=zeroed
+        )
+        return BoxDataMessage(box_id="box", lockers=[reading])
+
+    async def _events(self, session: AsyncSession) -> list[tuple[InventoryEventType, int | None, int | None]]:
+        events = await session.scalars(select(InventoryEvent).order_by(InventoryEvent.id))
+        return [(event.event_type, event.quantity_before, event.quantity_after) for event in events]
+
+    async def test_unzeroed_slot_logs_presence_but_not_quantity(self, session: AsyncSession) -> None:
+        service = self._service(session)
+        await service.handle(self._message(weight=0.0, zeroed=False))
 
         state = await session.get(LockerState, ("box", 0))
         assert state is not None
         assert (state.zeroed, state.nfc_flag, state.nfc_id, state.quantity) == (False, True, "cell", None)
-        assert list(await session.scalars(select(InventoryEvent))) == []
 
-    async def test_zero_starts_accounting_like_an_insertion(self, session: AsyncSession) -> None:
+        await service.handle(self._pulled_out(zeroed=False))
+        assert (state.nfc_flag, state.nfc_id) == (False, None)
+        assert await self._events(session) == [
+            (InventoryEventType.CELL_INSERTED, None, None),
+            (InventoryEventType.CELL_REMOVED, None, None),
+        ]
+
+    async def test_zero_starts_accounting_of_an_inserted_cell(self, session: AsyncSession) -> None:
         service = self._service(session)
         await service.handle(self._message(weight=0.0, zeroed=False))
         await service.handle(self._message(weight=50.0, zeroed=True))
@@ -77,7 +94,14 @@ class TestTelemetryWithoutZero:
         state = await session.get(LockerState, ("box", 0))
         assert state is not None
         assert (state.zeroed, state.quantity) == (True, 20)
-        events = list(await session.scalars(select(InventoryEvent)))
-        assert [(event.event_type, event.quantity_after) for event in events] == [
-            (InventoryEventType.CELL_INSERTED, 20)
+        assert await self._events(session) == [
+            (InventoryEventType.CELL_INSERTED, None, None),
+            (InventoryEventType.QUANTITY_CHANGED, None, 20),
         ]
+
+    async def test_cell_inserted_into_zeroed_slot_is_counted(self, session: AsyncSession) -> None:
+        service = self._service(session)
+        await service.handle(self._pulled_out(zeroed=True))
+        await service.handle(self._message(weight=50.0, zeroed=True))
+
+        assert await self._events(session) == [(InventoryEventType.CELL_INSERTED, 0, 20)]

@@ -67,12 +67,11 @@ class TelemetryService:
                 box_id=box_id, locker_id=reading.locker_id, nfc_flag=False, weight=0.0, reported_piece_weight=0.0
             )
             self._session.add(state)
+        # Cell presence comes from NFC and does not depend on the zero or the calibration.
+        inserted = reading.nfc_flag and (not state.nfc_flag or state.nfc_id != reading.nfc_id)
+        removed = state.nfc_flag and (not reading.nfc_flag or state.nfc_id != reading.nfc_id)
         if not reading.zeroed:
-            return self._apply_unzeroed(state, reading)
-
-        # A slot that just got its zero starts accounting as if its cell had been inserted.
-        inserted = reading.nfc_flag and (not state.nfc_flag or state.nfc_id != reading.nfc_id or not state.zeroed)
-        removed = state.nfc_flag and state.zeroed and (not reading.nfc_flag or state.nfc_id != reading.nfc_id)
+            return await self._apply_unzeroed(state, reading, inserted=inserted, removed=removed)
 
         if removed:
             removed_component = await self._find_component(state.nfc_id)
@@ -104,6 +103,7 @@ class TelemetryService:
                 before=previous_quantity,
                 after=quantity,
             )
+        # A slot that just got its zero has no quantity yet, so its first count is logged as a change from "—".
         elif reading.nfc_flag and component is not None and not calibrated and quantity != state.quantity:
             self._log(
                 InventoryEventType.QUANTITY_CHANGED,
@@ -125,8 +125,29 @@ class TelemetryService:
         state.updated_at = datetime.now(UTC)
         return self._indicator_policy.build(box_id, reading.locker_id, reading.nfc_flag, quantity)
 
-    def _apply_unzeroed(self, state: LockerState, reading: LockerReading) -> IndicatorsCommand:
-        """Without a zero the weight means nothing: track only cell presence and log no inventory events."""
+    async def _apply_unzeroed(
+        self, state: LockerState, reading: LockerReading, *, inserted: bool, removed: bool
+    ) -> IndicatorsCommand:
+        """Without a zero the weight means nothing: log only cell presence, without weight or quantity."""
+        if removed:
+            self._log(
+                InventoryEventType.CELL_REMOVED,
+                state,
+                await self._find_component(state.nfc_id),
+                0.0,
+                before=state.quantity,
+                after=None,
+            )
+        if inserted:
+            state.nfc_id = reading.nfc_id
+            self._log(
+                InventoryEventType.CELL_INSERTED,
+                state,
+                await self._find_component(reading.nfc_id),
+                0.0,
+                before=None,
+                after=None,
+            )
         state.nfc_flag = reading.nfc_flag
         state.nfc_id = reading.nfc_id if reading.nfc_flag else None
         state.weight = 0.0
