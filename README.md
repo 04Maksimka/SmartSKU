@@ -89,8 +89,10 @@
 - `domain/identity_store.py` — сохраняет полученный `box_id` в `emulator/var/` (аналог NVS-памяти ESP).
 - `domain/state_store.py` — состояние флота (вес в ячейках, вес штуки после калибровки, где какая ячейка, ожидающая
   калибровка) в `emulator/var/fleet_state.json`, запись после каждого изменения. Реальный бокс тоже не забывает это
-  при перезагрузке: тензодатчик меряет фактический вес, а вес штуки лежит в NVS. Пока файл есть, стартовые ячейки из
-  `config/*.yaml` игнорируются — чтобы начать с нуля, удалите `emulator/var/`.
+  при перезагрузке: тензодатчик меряет фактический вес, а вес штуки лежит в NVS. Пока файл есть, стартовые боксы и
+  ячейки из `config/*.yaml` игнорируются — чтобы начать с нуля, удалите `emulator/var/`.
+- Стартовых виртуальных боксов нет (`boxes: []`), чтобы на дашборде были только реальные боксы. Виртуальный бокс
+  добавляется на вкладке «Эмулятор» (или `POST /api/boxes`), свободные ячейки `cell-0001…0005` создаются при старте.
 - Стартовые боксы/ячейки задаются в `config/*.yaml`. Ячейки создаются пустыми и неоткалиброванными: эмулятор ничего
   не знает о компонентах. Вес меняется ручкой `POST /api/cells/{nfc_id}/grams {"grams": 50}`;
   `POST /api/cells/{nfc_id}/pieces {"pieces": -3}` доступна только после калибровки и использует вес штуки,
@@ -221,6 +223,8 @@ arduino-cli upload  -b esp32:esp32:esp32doit-devkit-v1 --board-options UploadSpe
 Через API (то же самое руками). N штук задаётся при запуске калибровки в бэкенде, M граммов — в эмуляторе при засыпке; бокс считает вес штуки = M / N.
 ```bash
 B=http://localhost:8000/api; E=http://localhost:8001/api; J='Content-Type: application/json'
+curl -X POST $E/boxes -H "$J" -d '{"hardware_id":"emu-box-001","lockers_count":4}'  # виртуальный бокс
+curl -X POST $E/boxes/emu-box-001/lockers/0/insert -H "$J" -d '{"nfc_id":"cell-0001"}'  # вставить пустую ячейку
 curl "$B/lockers?free=true"                                   # свободные ячейки
 curl -X POST $B/calibrations -H "$J" -d '{"box_id":"<box_id>","locker_id":0,"name":"Болт M3x10","tags":["M3"],"num_of_pieces":20}'
 curl -X POST $E/boxes/emu-box-001/lockers/0/pull-out           # вынуть ячейку
