@@ -33,6 +33,15 @@ class TelemetryConfig(BaseModel):
     weight_change_threshold: float
 
 
+class OnboardingConfig(BaseModel):
+    # Broker address a box should use; it differs from mqtt.host (the backend's own view, e.g. a Docker hostname).
+    # Empty host: the dashboard suggests the address it was opened with
+    broker_host: str = ""
+    broker_port: int = 1883
+    # A box connected from the dashboard must register within this time
+    claim_ttl_minutes: float = 30
+
+
 class LoggingConfig(BaseModel):
     level: str
 
@@ -42,6 +51,7 @@ class AppConfig(BaseModel):
     database: DatabaseConfig
     mqtt: MqttConfig
     telemetry: TelemetryConfig
+    onboarding: OnboardingConfig
     logging: LoggingConfig
 
 

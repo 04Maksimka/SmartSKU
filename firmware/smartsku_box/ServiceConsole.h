@@ -4,7 +4,7 @@
 
 // Сервисная команда из Serial Monitor (наладка на месте, бэкенду не нужна)
 struct ConsoleCommand {
-  enum class Type { None, Tare, Status, Verbose, ForgetBoxId, Help, Invalid };
+  enum class Type { None, Tare, Status, Verbose, ForgetBoxId, Setup, Help, Invalid };
 
   Type type = Type::None;
   uint8_t lockerId = 0;
@@ -15,6 +15,7 @@ struct ConsoleCommand {
 //   s                    — состояние бокса и ячеек
 //   v                    — вкл/выкл строку показаний раз в секунду
 //   forget               — забыть box_id и перезагрузиться (бокс заново зарегистрируется)
+//   setup                — режим подключения по Bluetooth (то же, что удержание BOOT)
 class ServiceConsole {
 public:
   static constexpr size_t MAX_LINE = 100;

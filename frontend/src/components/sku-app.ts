@@ -12,6 +12,7 @@ import {
 import type { DashboardSnapshot, DashboardStore, LockerOverview } from "../app/dashboard-store";
 import type { EmulatorStore } from "../app/emulator-store";
 import { Formatter } from "../app/formatter";
+import type { BoxSetupDialog } from "./box-setup-dialog";
 import type { CalibrationDialog } from "./calibration-dialog";
 import { Theme } from "./theme";
 
@@ -109,6 +110,13 @@ export class SkuApp extends LitElement {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(min(100%, 440px), 1fr));
         gap: 16px;
+      }
+
+      .empty-state {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
       }
 
       .split {
@@ -236,6 +244,11 @@ export class SkuApp extends LitElement {
     this.renderRoot.querySelector<CalibrationDialog>("sku-calibration-dialog")?.open(locker);
   }
 
+  private readonly openSetup = (): void => {
+    this.actionError = null;
+    this.renderRoot.querySelector<BoxSetupDialog>("sku-box-setup-dialog")?.open();
+  };
+
   private lockers(): LockerOverview[] {
     return this.snapshot.boxes.flatMap((box) => box.lockers);
   }
@@ -262,7 +275,8 @@ export class SkuApp extends LitElement {
               </div>`
             : nothing}
           ${this.tab === "dashboard"
-            ? html`<button class="primary" @click=${() => void this.openDialog(null)}>Калибровка</button>`
+            ? html`<button @click=${this.openSetup}>Подключить бокс</button>
+                <button class="primary" @click=${() => void this.openDialog(null)}>Калибровка</button>`
             : nothing}
           ${this.renderStatus()}
         </div>
@@ -291,6 +305,7 @@ export class SkuApp extends LitElement {
     return html`<sku-emulator-panel
       .store=${this.emulatorStore}
       .api=${this.emulatorApi}
+      .commands=${this.commands}
     ></sku-emulator-panel>`;
   }
 
@@ -313,8 +328,12 @@ export class SkuApp extends LitElement {
                 (item) => html`<sku-box-card .overview=${item}></sku-box-card>`,
               )}
             </div>`
-          : html`<div class="card empty">
-              Боксы ещё не подключались. Для эмулятора: <code>docker compose --profile emulator up -d</code>
+          : html`<div class="card empty empty-state">
+              <div>Устройств нет. Зажмите BOOT на плате бокса на 3 секунды и подключите его по Bluetooth.</div>
+              <button class="primary" @click=${this.openSetup}>Подключить бокс</button>
+              ${this.emulatorStore
+                ? html`<div class="muted">Или добавьте виртуальный бокс на вкладке «Эмулятор».</div>`
+                : nothing}
             </div>`}
       </section>
 
@@ -331,6 +350,8 @@ export class SkuApp extends LitElement {
         .calibrations=${snapshot.calibrations}
         .service=${this.commands}
       ></sku-calibration-dialog>
+
+      <sku-box-setup-dialog .service=${this.commands}></sku-box-setup-dialog>
 
       <section>
         <sku-event-log .events=${snapshot.events} .boxNames=${snapshot.boxNames}></sku-event-log>

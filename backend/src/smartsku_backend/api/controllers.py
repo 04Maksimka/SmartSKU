@@ -4,16 +4,20 @@ from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import APIRouter, Query, status
 
 from smartsku_backend.api.schemas import (
+    BoxClaimRequest,
     BoxSchema,
     CalibrationRequest,
     CalibrationSchema,
     ComponentSchema,
     InventoryEventSchema,
     LockerSchema,
+    OnboardingSettingsSchema,
 )
+from smartsku_backend.config import OnboardingConfig
 from smartsku_backend.db.models import CalibrationStatus
 from smartsku_backend.services.calibration import CalibrationService
 from smartsku_backend.services.inventory import ComponentService, InventoryQueryService
+from smartsku_backend.services.provisioning import ProvisioningService
 from smartsku_backend.services.tare import TareService
 
 
@@ -130,3 +134,19 @@ class ComponentsController:
         limit: Annotated[int, Query(ge=1, le=1000)] = 100,
     ) -> list[InventoryEventSchema]:
         return [InventoryEventSchema.model_validate(item) for item in await inventory.events(box_id, nfc_id, limit)]
+
+
+class OnboardingController:
+    """Connecting a new box from the dashboard: the browser talks to the box over Bluetooth, the backend only
+    needs to expect it and to tell which broker address the box should use."""
+
+    def __init__(self) -> None:
+        self.router = APIRouter(prefix="/api/onboarding", tags=["onboarding"], route_class=DishkaRoute)
+        self.router.add_api_route("/claims", self.claim, methods=["POST"], status_code=status.HTTP_204_NO_CONTENT)
+        self.router.add_api_route("/settings", self.settings, methods=["GET"], response_model=OnboardingSettingsSchema)
+
+    async def claim(self, request: BoxClaimRequest, provisioning: FromDishka[ProvisioningService]) -> None:
+        await provisioning.claim(request.hardware_id.strip())
+
+    async def settings(self, config: FromDishka[OnboardingConfig]) -> OnboardingSettingsSchema:
+        return OnboardingSettingsSchema(broker_host=config.broker_host, broker_port=config.broker_port)

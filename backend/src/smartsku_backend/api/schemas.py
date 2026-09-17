@@ -17,6 +17,15 @@ class BoxSchema(OrmSchema):
     status_changed_at: datetime | None
 
 
+class BoxClaimRequest(BaseModel):
+    hardware_id: str = Field(min_length=1, max_length=64)
+
+
+class OnboardingSettingsSchema(BaseModel):
+    broker_host: str
+    broker_port: int
+
+
 class ComponentSchema(OrmSchema):
     nfc_id: str
     name: str

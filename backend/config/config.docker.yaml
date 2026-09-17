@@ -21,5 +21,13 @@ telemetry:
   # Weight changes below this value are not treated as a state change
   weight_change_threshold: 0.5
 
+onboarding:
+  # Broker address sent to a box connected from the dashboard over Bluetooth: IP or name.local of this computer.
+  # Empty: the dashboard suggests the host it was opened with (and asks for it when opened as localhost)
+  broker_host: ""
+  broker_port: 1883
+  # New boxes are registered only after "Подключить бокс" on the dashboard, within this time
+  claim_ttl_minutes: 30
+
 logging:
   level: INFO

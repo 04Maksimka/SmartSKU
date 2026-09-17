@@ -8,7 +8,12 @@ from dishka.integrations.fastapi import setup_dishka
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from smartsku_backend.api.controllers import BoxesController, CalibrationController, ComponentsController
+from smartsku_backend.api.controllers import (
+    BoxesController,
+    CalibrationController,
+    ComponentsController,
+    OnboardingController,
+)
 from smartsku_backend.config import AppConfig, MqttConfig
 from smartsku_backend.db.database import Database
 from smartsku_backend.di import ContainerFactory
@@ -25,7 +30,7 @@ class ApplicationFactory:
 
     def create(self) -> FastAPI:
         app = FastAPI(title="SmartSKU backend", lifespan=self._lifespan)
-        for controller in (BoxesController(), CalibrationController(), ComponentsController()):
+        for controller in (BoxesController(), CalibrationController(), ComponentsController(), OnboardingController()):
             app.include_router(controller.router)
         app.add_api_route("/health", self._health, methods=["GET"])
         app.add_exception_handler(DomainError, self._domain_error_handler)

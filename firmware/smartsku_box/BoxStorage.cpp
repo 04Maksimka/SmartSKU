@@ -8,6 +8,24 @@ void BoxStorage::begin() {
   }
 }
 
+NetworkSettings BoxStorage::networkSettings() {
+  NetworkSettings settings;
+  settings.ssid = prefs_.getString("wifi_ssid", "");
+  settings.username = prefs_.getString("wifi_user", "");
+  settings.password = prefs_.getString("wifi_pass", "");
+  settings.mqttHost = prefs_.getString("mqtt_host", "");
+  settings.mqttPort = prefs_.getUShort("mqtt_port", 0);
+  return settings;
+}
+
+void BoxStorage::saveNetworkSettings(const NetworkSettings &settings) {
+  prefs_.putString("wifi_ssid", settings.ssid);
+  prefs_.putString("wifi_user", settings.username);
+  prefs_.putString("wifi_pass", settings.password);
+  prefs_.putString("mqtt_host", settings.mqttHost);
+  prefs_.putUShort("mqtt_port", settings.mqttPort);
+}
+
 String BoxStorage::boxId() {
   return prefs_.getString("box_id", "");
 }

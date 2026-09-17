@@ -61,6 +61,8 @@ ConsoleCommand ServiceConsole::parse(String line) {
     command.type = ConsoleCommand::Type::Verbose;
   } else if (name == "h" || name == "help") {
     command.type = ConsoleCommand::Type::Help;
+  } else if (name == "setup") {
+    command.type = ConsoleCommand::Type::Setup;
   } else if (name == "forget") {
     command.type = ConsoleCommand::Type::ForgetBoxId;
   } else if (name == "t") {
@@ -94,4 +96,5 @@ void ServiceConsole::printHelp() {
   Serial.println("  s                   status");
   Serial.println("  v                   toggle readings every second");
   Serial.println("  forget              forget box_id and reboot");
+  Serial.println("  setup               Bluetooth setup mode (same as holding BOOT for 3 s)");
 }

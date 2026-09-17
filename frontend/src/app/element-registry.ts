@@ -1,4 +1,5 @@
 import { BoxCard } from "../components/box-card";
+import { BoxSetupDialog } from "../components/box-setup-dialog";
 import { CalibrationDialog } from "../components/calibration-dialog";
 import { CalibrationList } from "../components/calibration-list";
 import { ComponentTable } from "../components/component-table";
@@ -16,6 +17,7 @@ export class ElementRegistry {
     ["sku-calibration-list", CalibrationList],
     ["sku-event-log", EventLog],
     ["sku-calibration-dialog", CalibrationDialog],
+    ["sku-box-setup-dialog", BoxSetupDialog],
     ["sku-emulator-panel", EmulatorPanel],
   ];
 

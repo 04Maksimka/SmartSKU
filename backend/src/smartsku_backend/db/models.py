@@ -32,6 +32,15 @@ class Box(Base):
     status_changed_at: Mapped[datetime | None] = mapped_column(UtcDateTime)
 
 
+class BoxClaim(Base):
+    """A box the user is connecting from the dashboard; only claimed hardware may register as a new box."""
+
+    __tablename__ = "box_claims"
+
+    hardware_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=lambda: datetime.now(UTC))
+
+
 class Component(Base):
     """What is stored in a physical cell. Keyed by the cell's NFC tag, so it follows the cell between lockers."""
 

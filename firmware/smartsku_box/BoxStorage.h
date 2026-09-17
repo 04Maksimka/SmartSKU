@@ -3,11 +3,17 @@
 #include <Arduino.h>
 #include <Preferences.h>
 
-// Энергонезависимая память бокса (NVS): box_id, ноль тензодатчика каждой ячейки, вес штуки для каждой NFC-метки.
+#include "NetworkSettings.h"
+
+// Энергонезависимая память бокса (NVS): настройки сети, box_id, ноль тензодатчика каждой ячейки, вес штуки для каждой
+// NFC-метки.
 // Всё это переживает перезагрузку: после включения ячейку уже нельзя тарировать — в ней может лежать крепёж
 class BoxStorage {
 public:
   void begin();
+
+  NetworkSettings networkSettings();
+  void saveNetworkSettings(const NetworkSettings &settings);
 
   String boxId();
   void saveBoxId(const String &boxId);

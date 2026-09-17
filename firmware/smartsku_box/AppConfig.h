@@ -16,18 +16,43 @@ struct LockerHardware {
   int8_t ledGreen;
 };
 
-// Несекретные настройки прошивки. Логин/пароль Wi-Fi и адрес брокера лежат в secrets.h
+// Настройки прошивки. Сеть и адрес брокера задаются с фронта по Bluetooth и хранятся в NVS (см. NetworkSettings)
 struct AppConfig {
+  // Показывается на фронте при подключении бокса
+  static constexpr const char *FIRMWARE_VERSION = "0.4.0";
   static constexpr unsigned long SERIAL_BAUD = 115200;
   // Встроенный светодиод платы: мигает, пока нет связи с брокером; горит, когда бокс работает
   static constexpr int STATUS_LED_PIN = 2;
   static constexpr unsigned long STATUS_BLINK_FAST_MS = 150;
   static constexpr unsigned long STATUS_BLINK_SLOW_MS = 600;
+  // Режим подключения: короткая вспышка раз в секунду
+  static constexpr unsigned long STATUS_SETUP_PERIOD_MS = 1000;
+  static constexpr unsigned long STATUS_SETUP_FLASH_MS = 100;
+
+  // Режим подключения по Bluetooth: удержание кнопки BOOT (GPIO0) на работающей плате.
+  // Держать BOOT при подаче питания нельзя — плата уйдёт в режим прошивки
+  static constexpr int SETUP_BUTTON_PIN = 0;
+  static constexpr unsigned long SETUP_HOLD_MS = 3000;
+  // Сколько бокс виден по Bluetooth, если к нему никто не подключился
+  static constexpr unsigned long SETUP_WINDOW_MS = 5UL * 60 * 1000;
+  // После регистрации канал ещё открыт, чтобы фронт успел получить статус
+  static constexpr unsigned long SETUP_LINGER_MS = 15000;
+  static constexpr const char *BLE_NAME_PREFIX = "SmartSKU-";
+  // GATT-сервис настройки: построчный JSON, как UART. Те же UUID — во frontend/src/app/ble-box-link.ts
+  static constexpr const char *BLE_SERVICE_UUID = "6f1c0001-8c5b-4f5e-9a57-5b1e2a8d0c11";
+  static constexpr const char *BLE_RX_UUID = "6f1c0002-8c5b-4f5e-9a57-5b1e2a8d0c11";
+  static constexpr const char *BLE_TX_UUID = "6f1c0003-8c5b-4f5e-9a57-5b1e2a8d0c11";
+  static constexpr size_t BLE_MAX_REQUEST = 1024;
+  static constexpr uint16_t BLE_MTU = 247;
+  // Пауза между кусками ответа, чтобы стек Bluetooth не терял уведомления
+  static constexpr unsigned long BLE_CHUNK_DELAY_MS = 15;
+  static constexpr size_t WIFI_SCAN_LIMIT = 20;
 
   static constexpr unsigned long WIFI_CONNECT_TIMEOUT_MS = 30000;
-  static constexpr int WIFI_SCAN_PRINT_LIMIT = 25;
+  static constexpr unsigned long WIFI_DISCONNECT_WAIT_MS = 2000;
 
-  static constexpr uint16_t MQTT_PORT = 1883;
+  static constexpr uint16_t DEFAULT_MQTT_PORT = 1883;
+  static constexpr unsigned long MDNS_QUERY_TIMEOUT_MS = 2000;
   static constexpr uint16_t MQTT_KEEPALIVE_S = 30;
   static constexpr uint16_t MQTT_SOCKET_TIMEOUT_S = 5;
   static constexpr uint16_t MQTT_BUFFER_SIZE = 1024;

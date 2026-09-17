@@ -1,3 +1,4 @@
+import type { OnboardingSettings } from "../api/box-setup-types";
 import type { ApiClient } from "../api/client";
 import type { Calibration, CalibrationRequest } from "../api/types";
 import type { DashboardStore } from "./dashboard-store";
@@ -8,6 +9,18 @@ export class CommandService {
     private readonly api: ApiClient,
     private readonly store: DashboardStore,
   ) {}
+
+  async claimBox(hardwareId: string): Promise<void> {
+    await this.api.claimBox(hardwareId);
+  }
+
+  onboardingSettings(): Promise<OnboardingSettings> {
+    return this.api.onboardingSettings();
+  }
+
+  async refresh(): Promise<void> {
+    await this.store.refreshNow();
+  }
 
   async tare(boxId: string, lockerId: number): Promise<void> {
     await this.api.tare(boxId, lockerId);

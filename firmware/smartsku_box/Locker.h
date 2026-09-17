@@ -30,6 +30,8 @@ public:
     return tareWindowsLeft_ == 0 && windowReady_ && settled_;
   }
   void fillReading(JsonObject reading) const;
+  // Что из железа ячейки отвечает — для фронта при подключении бокса
+  void fillHardwareInfo(JsonObject info) const;
   void printStatus() const;
 
   // Команды бэкенда
@@ -56,6 +58,7 @@ private:
   int pieces() const;
 
   const uint8_t id_;
+  const LockerHardware hardware_;
   const bool invertLoad_;
   BoxStorage &storage_;
   LoadCell loadCell_;

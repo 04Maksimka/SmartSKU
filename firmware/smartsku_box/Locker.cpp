@@ -5,6 +5,7 @@
 
 Locker::Locker(uint8_t lockerId, const LockerHardware &hardware, BoxStorage &storage)
   : id_(lockerId),
+    hardware_(hardware),
     invertLoad_(hardware.invertLoad),
     storage_(storage),
     loadCell_(hardware.hxDout, hardware.hxSck),
@@ -235,6 +236,16 @@ void Locker::fillReading(JsonObject reading) const {
   reading["piece_weight"] = present ? std::round(pieceWeight_ * 100) / 100 : 0.0;
   reading["number_of_pieces"] = present ? pieces() : 0;
   reading["zeroed"] = hasZero_;
+}
+
+void Locker::fillHardwareInfo(JsonObject info) const {
+  info["locker_id"] = id_;
+  info["load_cell"] = hardware_.hxDout >= 0 && windowReady_ && !loadCell_.failed();
+  info["nfc_reader"] = nfc_.chipFound();
+  info["display"] = hardware_.displayClk >= 0 && hardware_.displayDio >= 0;
+  info["led"] = hardware_.ledRed >= 0 || hardware_.ledGreen >= 0;
+  info["zeroed"] = hasZero_;
+  info["cell"] = nfc_.present() ? nfc_.uid() : String();
 }
 
 void Locker::printStatus() const {

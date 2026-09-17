@@ -6,9 +6,15 @@
 
 #include "AppConfig.h"
 #include "BoxTopics.h"
+#include "SecretsSeed.h"
 
 BoxApp::BoxApp()
-  : hardwareId_(readHardwareId()), mqtt_("box-" + hardwareId_), statusLed_(AppConfig::STATUS_LED_PIN) {
+  : hardwareId_(readHardwareId()),
+    mqtt_("box-" + hardwareId_),
+    statusLed_(AppConfig::STATUS_LED_PIN),
+    setupButton_(AppConfig::SETUP_BUTTON_PIN, AppConfig::SETUP_HOLD_MS),
+    bleChannel_(AppConfig::BLE_NAME_PREFIX + hardwareId_.substring(hardwareId_.length() - 4)),
+    setup_(hardwareId_, bleChannel_, wifi_, mqtt_, lockers_) {
   for (uint8_t id = 0; id < AppConfig::LOCKER_COUNT; ++id) {
     lockers_.push_back(std::make_unique<Locker>(id, AppConfig::LOCKERS[id], storage_));
   }
@@ -23,10 +29,13 @@ String BoxApp::readHardwareId() {
 
 void BoxApp::begin() {
   Serial.begin(AppConfig::SERIAL_BAUD);
-  Serial.printf("\n[app] SmartSKU box, hardware_id %s, %u locker(s)\n", hardwareId_.c_str(), AppConfig::LOCKER_COUNT);
+  Serial.printf(
+    "\n[app] SmartSKU box %s, hardware_id %s, %u locker(s)\n", AppConfig::FIRMWARE_VERSION, hardwareId_.c_str(), AppConfig::LOCKER_COUNT
+  );
   statusLed_.begin();
   storage_.begin();
   console_.begin();
+  setupButton_.begin();
 
   SPI.begin(AppConfig::RFID_SCK, AppConfig::RFID_MISO, AppConfig::RFID_MOSI);
   for (auto &locker : lockers_) {
@@ -44,9 +53,48 @@ void BoxApp::begin() {
     startRunning(savedBoxId);
   }
   wifi_.begin();
+  loadNetworkSettings();
+}
+
+void BoxApp::loadNetworkSettings() {
+  network_ = storage_.networkSettings();
+  if (!network_.configured() && SecretsSeed::fill(network_)) {
+    Serial.println("[app] network settings taken from secrets.h");
+    storage_.saveNetworkSettings(network_);
+  }
+  if (!network_.configured()) {
+    Serial.println("[app] no network settings: connect the box from the dashboard via Bluetooth");
+    return;
+  }
+  wifi_.configure(network_);
+  mqtt_.setServer(network_.mqttHost, network_.mqttPort);
+}
+
+// Другая сеть или другой сервер: box_id мог быть выдан другим бэкендом, поэтому регистрируемся заново.
+// Тот же бэкенд вернёт тот же box_id — регистрация по hardware_id идемпотентна
+void BoxApp::applyNetworkSettings(const NetworkSettings &settings) {
+  network_ = settings;
+  storage_.saveNetworkSettings(network_);
+  storage_.forgetBoxId();
+  startProvisioning();
+  wifi_.configure(network_);
+  mqtt_.setServer(network_.mqttHost, network_.mqttPort);
 }
 
 void BoxApp::update() {
+  if (setupButton_.update()) {
+    Serial.println("[app] BOOT held: setup mode");
+    setup_.open();
+  }
+  if (!network_.configured() && !setup_.isOpen()) {
+    setup_.open();
+  }
+  setup_.update(network_, boxId_);
+  NetworkSettings newSettings;
+  if (setup_.takeSettings(newSettings)) {
+    applyNetworkSettings(newSettings);
+  }
+
   wifi_.update();
   mqtt_.update(wifi_.connected());
 
@@ -217,6 +265,9 @@ void BoxApp::handleConsole(const ConsoleCommand &command) {
       Serial.flush();
       ESP.restart();
       break;
+    case ConsoleCommand::Type::Setup:
+      setup_.open();
+      break;
     case ConsoleCommand::Type::Help:
     case ConsoleCommand::Type::Invalid:
       ServiceConsole::printHelp();
@@ -226,8 +277,9 @@ void BoxApp::handleConsole(const ConsoleCommand &command) {
 
 void BoxApp::printStatus() {
   Serial.printf(
-    "[app] hardware_id %s | box_id %s | wifi %s (%s, %d dBm) | mqtt %s\n", hardwareId_.c_str(), boxId_.isEmpty() ? "-" : boxId_.c_str(),
-    wifi_.connected() ? "up" : "down", WiFi.localIP().toString().c_str(), WiFi.RSSI(), mqtt_.connected() ? "up" : "down"
+    "[app] hardware_id %s | box_id %s | wifi %s %s (%s, %d dBm) | mqtt %s:%u %s | setup %s\n", hardwareId_.c_str(),
+    boxId_.isEmpty() ? "-" : boxId_.c_str(), network_.ssid.c_str(), wifi_.connected() ? "up" : "down", WiFi.localIP().toString().c_str(), WiFi.RSSI(),
+    network_.mqttHost.c_str(), network_.mqttPort, mqtt_.connected() ? "up" : "down", setup_.isOpen() ? "open" : "closed"
   );
   for (auto &locker : lockers_) {
     locker->printStatus();
@@ -235,7 +287,9 @@ void BoxApp::printStatus() {
 }
 
 void BoxApp::updateStatusLed(bool online) {
-  if (online) {
+  if (setup_.isOpen()) {
+    statusLed_.setMode(StatusLed::Mode::Flash, AppConfig::STATUS_SETUP_PERIOD_MS, AppConfig::STATUS_SETUP_FLASH_MS);
+  } else if (online) {
     statusLed_.setMode(StatusLed::Mode::On);
   } else if (mqtt_.connected()) {
     statusLed_.setMode(StatusLed::Mode::Blink, AppConfig::STATUS_BLINK_SLOW_MS);

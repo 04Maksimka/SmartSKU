@@ -3,6 +3,7 @@ import { repeat } from "lit/directives/repeat.js";
 
 import type { EmulatorClient } from "../api/emulator-client";
 import type { EmulatorBox, EmulatorCell, EmulatorLocker } from "../api/emulator-types";
+import type { CommandService } from "../app/command-service";
 import type { EmulatorSnapshot, EmulatorStore } from "../app/emulator-store";
 import { Formatter } from "../app/formatter";
 import { Theme } from "./theme";
@@ -12,6 +13,7 @@ export class EmulatorPanel extends LitElement {
   static override properties = {
     store: { attribute: false },
     api: { attribute: false },
+    commands: { attribute: false },
     snapshot: { state: true },
     grams: { state: true },
     pieces: { state: true },
@@ -164,6 +166,8 @@ export class EmulatorPanel extends LitElement {
 
   declare store: EmulatorStore;
   declare api: EmulatorClient;
+  /** A virtual box, like a real one, registers only after the backend was told to expect it. */
+  declare commands: CommandService;
   declare snapshot: EmulatorSnapshot;
   declare grams: Record<string, string>;
   declare pieces: Record<string, string>;
@@ -237,6 +241,7 @@ export class EmulatorPanel extends LitElement {
             ?disabled=${this.busy !== null}
             @click=${() =>
               void this.run("new-box", async () => {
+                await this.commands.claimBox(this.newBox.trim());
                 await this.api.createBox(this.newBox.trim(), 4);
                 this.newBox = "";
               })}

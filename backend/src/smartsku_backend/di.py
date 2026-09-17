@@ -3,7 +3,7 @@ from collections.abc import AsyncIterable
 from dishka import AsyncContainer, Provider, Scope, from_context, make_async_container, provide, provide_all
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from smartsku_backend.config import AppConfig, MqttConfig, TelemetryConfig
+from smartsku_backend.config import AppConfig, MqttConfig, OnboardingConfig, TelemetryConfig
 from smartsku_backend.db.database import Database
 from smartsku_backend.messaging.publisher import CommandPublisher, MqttConnection
 from smartsku_backend.messaging.topics import MqttTopics
@@ -23,6 +23,10 @@ class ConfigProvider(Provider):
     @provide(scope=Scope.APP)
     def mqtt(self, config: AppConfig) -> MqttConfig:
         return config.mqtt
+
+    @provide(scope=Scope.APP)
+    def onboarding(self, config: AppConfig) -> OnboardingConfig:
+        return config.onboarding
 
     @provide(scope=Scope.APP)
     def telemetry(self, config: AppConfig) -> TelemetryConfig:

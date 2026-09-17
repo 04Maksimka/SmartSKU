@@ -1,6 +1,7 @@
 // Прошивка бокса SmartSKU: HX711 + RC522 + TM1637 на каждую ячейку, связь с бэкендом по MQTT. Логика — в BoxApp.
-// Перед сборкой: скопируйте secrets.example.h в secrets.h и впишите логин/пароль Wi-Fi и IP брокера.
-// Библиотеки: PubSubClient, ArduinoJson, HX711 (bogde), MFRC522 (miguelbalboa), GyverTM1637.
+// Сеть и сервер задаются с фронта по Bluetooth (кнопка «Подключить бокс»), secrets.h не обязателен.
+// Плата: ESP32 Dev Module, Partition Scheme: Huge APP (прошивка с Bluetooth не влезает в 1.3 МБ).
+// Библиотеки: PubSubClient, ArduinoJson, HX711 (bogde), MFRC522 (miguelbalboa), GyverTM1637; BLE — из ядра ESP32.
 // Пины и настройки — в AppConfig.h. Сервисные команды (тара, калибровка весов) — в Serial Monitor на 115200, 'h' — справка.
 
 #include "BoxApp.h"
