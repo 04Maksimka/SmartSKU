@@ -22,6 +22,10 @@ class MqttTopics:
     def all_box_status(self) -> str:
         return f"{self._prefix}/boxes/+/status"
 
+    @property
+    def all_box_events(self) -> str:
+        return f"{self._prefix}/boxes/+/events"
+
     def box_commands(self, box_id: str) -> str:
         return f"{self._prefix}/boxes/{box_id}/commands"
 

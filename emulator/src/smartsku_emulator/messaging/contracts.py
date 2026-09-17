@@ -31,6 +31,21 @@ class TareCommand(BaseModel):
     locker_id: int
 
 
+class TareDoneEvent(BaseModel):
+    event: Literal["tare_done"] = "tare_done"
+    box_id: str
+    locker_id: int
+    nfc_id: str
+    tare: float
+
+
+class TareFailedEvent(BaseModel):
+    event: Literal["tare_failed"] = "tare_failed"
+    box_id: str
+    locker_id: int
+    reason: str
+
+
 class IndicatorsCommand(BaseModel):
     command: Literal["indicators"]
     box_id: str

@@ -84,6 +84,7 @@
     порог `telemetry.weight_change_threshold` отсекает мелкие изменения, фронт подписывает вес как «ед.»;
   - `indicators.py` — команда индикаторов: дисплей показывает количество (0, если ячейки нет или она не откалибрована),
     светодиод пока всегда `none` — он зарезервирован под другие сценарии;
+  - `box_events.py` — разовые отчёты бокса (топик `events`) в журнал;
   - `calibration.py`, `inventory.py` — сценарии для REST API.
 - `db/` — SQLAlchemy-модели и `Database`. БД — SQLite-файл `backend/var/smartsku.db` (в Docker папка примонтирована),
   режим WAL. **Не открывайте файл с хоста (`sqlite3`, DB Browser), пока бэкенд работает в Docker на macOS:** блокировки
@@ -103,7 +104,7 @@
   по своему `piece_weight`.
 - `calibrations` — заявки на калибровку (`pending` → `completed` / `cancelled`).
 - `inventory_events` — журнал: `cell_removed`, `cell_inserted`, `quantity_changed`, `calibrated`
-  с `quantity_before/after`. Например, «унёс ячейку с 20 шт., вернул с 3» → `cell_inserted 20 -> 3`.
+  с `quantity_before/after`; `tared` (вес — новый ноль в единицах бокса) и `tare_failed` (`note` — причина). Например, «унёс ячейку с 20 шт., вернул с 3» → `cell_inserted 20 -> 3`.
 
 ### Эмулятор (`emulator/src/smartsku_emulator`)
 - `domain/model.py` — `VirtualCell` (ячейка с NFC, содержимое уезжает вместе с ней), `VirtualBox` (логика прошивки:
@@ -164,6 +165,7 @@ TypeScript + [Lit](https://lit.dev) (веб-компоненты — класс�
 | `smartsku/provision/response/<hardware_id>` | бэкенд → бокс | 1 | `{"hardware_id": "...", "box_id": "..."}` |
 | `smartsku/boxes/<box_id>/data` | бокс → бэкенд | 0 | `box_data.json`, каждые ~0.5 с |
 | `smartsku/boxes/<box_id>/status` | бокс → бэкенд | 1, retain | `online` при подключении; `offline` — Last Will |
+| `smartsku/boxes/<box_id>/events` | бокс → бэкенд | 1 | `box_event.json`: `tare_done` (новый ноль `tare`) или `tare_failed` (`reason`: `no_cell` / `load_cell_failed`) |
 | `smartsku/boxes/<box_id>/commands` | бэкенд → бокс | 1 | `calibration_command.json`, `indicators_command.json` или `{"command":"tare","box_id":"...","locker_id":0}` |
 
 **Инициализация бокса:** при первом включении (нет `box_id` в памяти) бокс подписывается на
@@ -209,7 +211,10 @@ GATT-сервис `6f1c0001-8c5b-4f5e-9a57-5b1e2a8d0c11`: RX `…0002` (write) �
 - до калибровки `piece_weight=0`, `number_of_pieces=0`;
 - `zeroed` — установлен ли ноль слота; без нуля слот всё равно отправляется, но с `weight=0`, `number_of_pieces=0`
   (поле необязательное: если его нет, бэкенд считает `zeroed=true`);
-- по команде `tare` бокс проверяет, что ячейка вставлена, и сохраняет ноль по четырём окнам измерения (~2 с);
+- по команде `tare` бокс проверяет, что ячейка вставлена, и сохраняет ноль по четырём окнам измерения (~2 с), затем
+  публикует `tare_done` в `events`; если начать нельзя — сразу `tare_failed`. Бэкенд пишет оба в журнал
+  (`tared` / `tare_failed` с `note`), фронт по ним убирает подсказку «держите ячейку неподвижно»
+  (`src/app/tare-watcher.ts`, без ответа 20 с — ошибка);
 - по команде `calibration` бокс ждёт повторной вставки ячейки и считает `piece_weight = weight / num_of_pieces`.
   Бэкенд засчитывает калибровку, когда видит новый `piece_weight > 0` в слоте с активной заявкой.
 

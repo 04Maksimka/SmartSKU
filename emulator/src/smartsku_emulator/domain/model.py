@@ -29,6 +29,14 @@ class VirtualCell:
         return cell
 
 
+class TareResult:
+    """What a box reports after setting a zero: the cell and the weight taken as zero."""
+
+    def __init__(self, cell_nfc_id: str, tare: float) -> None:
+        self.cell_nfc_id = cell_nfc_id
+        self.tare = tare
+
+
 class VirtualLocker:
     """A load cell slot inside a box, with its LED and display.
 
@@ -95,12 +103,13 @@ class VirtualBox:
         self.locker(locker_id).pending_calibration = num_of_pieces
         self._store.record()
 
-    def apply_tare(self, locker_id: int) -> None:
+    def apply_tare(self, locker_id: int) -> "TareResult":
         locker = self.locker(locker_id)
         if locker.cell is None:
             raise ConflictError(f"Locker {locker_id} of box {self.hardware_id}: insert the empty cell before taring")
         locker.zero_offset = locker.cell.weight
         self._store.record()
+        return TareResult(cell_nfc_id=locker.cell.nfc_id, tare=locker.zero_offset)
 
     def apply_indicators(self, locker_id: int, led_color: str, screen_number: int) -> None:
         locker = self.locker(locker_id)

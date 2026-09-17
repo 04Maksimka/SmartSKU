@@ -24,6 +24,10 @@ public:
   uint8_t id() const {
     return id_;
   }
+  // UID вставленной ячейки или пустая строка
+  String cellUid() const {
+    return nfc_.present() ? nfc_.uid() : String();
+  }
   // Вес измерен и не «плывёт» после вставки, ноль сейчас не устанавливается; иначе ячейку не стоит отправлять
   // в телеметрию. Слот без нуля отправляется с zeroed=false и нулевым весом, чтобы фронт предупредил о нём
   bool ready() const {
@@ -40,8 +44,11 @@ public:
   // Нет связи с бэкендом — дисплей показывает количество, посчитанное самим боксом
   void setBackendOnline(bool online);
 
-  // Ноль по вставленной пустой ячейке; false, если ячейки или датчика нет.
-  bool requestTare();
+  enum class TareStart { Started, NoCell, LoadCellFailed };
+  // Ноль по вставленной пустой ячейке: копится несколько окон, результат — takeTareDone()
+  TareStart requestTare();
+  // true один раз после сохранения нового нуля; zero — сырые показания с пустой ячейкой
+  bool takeTareDone(double &zero);
 
 private:
   void onWindow();
@@ -71,6 +78,7 @@ private:
   // Сколько окон ещё копить для нуля; 0 — обнуление не идёт
   uint8_t tareWindowsLeft_ = 0;
   double tareSum_ = 0;
+  bool tareDone_ = false;
   bool windowReady_ = false;
   // Вес, который уходит в box_data и на дисплей: меняется, только когда сдвиг больше шума (гистерезис)
   double reportedWeight_ = 0;

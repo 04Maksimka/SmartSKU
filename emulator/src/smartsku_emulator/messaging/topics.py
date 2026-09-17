@@ -18,5 +18,8 @@ class MqttTopics:
     def box_status(self, box_id: str) -> str:
         return f"{self._prefix}/boxes/{box_id}/status"
 
+    def box_events(self, box_id: str) -> str:
+        return f"{self._prefix}/boxes/{box_id}/events"
+
     def box_commands(self, box_id: str) -> str:
         return f"{self._prefix}/boxes/{box_id}/commands"

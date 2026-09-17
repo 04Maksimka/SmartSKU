@@ -44,6 +44,9 @@ private:
   void startRunning(const String &boxId);
   void requestBoxId();
   void publishTelemetry();
+  void publishTareResults();
+  void publishTareFailure(uint8_t lockerId, Locker::TareStart result);
+  void startTare(Locker &locker);
   void printStatus();
   void updateStatusLed(bool online);
 

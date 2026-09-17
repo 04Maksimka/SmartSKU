@@ -1,0 +1,15 @@
+[
+    {
+        "event": "tare_done",
+        "box_id": "fegrr234",
+        "locker_id": 0,
+        "nfc_id": "BA2C5035",
+        "tare": 212169.5
+    },
+    {
+        "event": "tare_failed",
+        "box_id": "fegrr234",
+        "locker_id": 0,
+        "reason": "no_cell"
+    }
+]

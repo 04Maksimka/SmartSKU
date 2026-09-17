@@ -54,7 +54,13 @@ export interface CalibrationRequest {
   num_of_pieces: number;
 }
 
-export type InventoryEventType = "cell_removed" | "cell_inserted" | "quantity_changed" | "calibrated";
+export type InventoryEventType =
+  | "cell_removed"
+  | "cell_inserted"
+  | "quantity_changed"
+  | "calibrated"
+  | "tared"
+  | "tare_failed";
 
 export interface InventoryEvent {
   id: number;
@@ -67,5 +73,7 @@ export interface InventoryEvent {
   quantity_before: number | null;
   quantity_after: number | null;
   quantity_delta: number | null;
+  /** Detail such as why the box refused to set the zero. */
+  note: string | null;
   created_at: string;
 }

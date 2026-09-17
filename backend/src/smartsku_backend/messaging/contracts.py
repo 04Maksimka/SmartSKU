@@ -1,5 +1,5 @@
 from enum import StrEnum
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -42,6 +42,31 @@ class TareCommand(BaseModel):
     command: Literal["tare"] = "tare"
     box_id: str
     locker_id: int
+
+
+class TareDoneEvent(BaseModel):
+    event: Literal["tare_done"]
+    box_id: str
+    locker_id: int
+    nfc_id: str | None = None
+    # New zero in the box's weight units (raw load cell reading with the empty cell)
+    tare: float
+
+    @field_validator("nfc_id")
+    @classmethod
+    def empty_nfc_id_is_none(cls, value: str | None) -> str | None:
+        return value or None
+
+
+class TareFailedEvent(BaseModel):
+    event: Literal["tare_failed"]
+    box_id: str
+    locker_id: int
+    # no_cell | load_cell_failed
+    reason: str
+
+
+BoxEvent = Annotated[TareDoneEvent | TareFailedEvent, Field(discriminator="event")]
 
 
 class IndicatorsCommand(BaseModel):

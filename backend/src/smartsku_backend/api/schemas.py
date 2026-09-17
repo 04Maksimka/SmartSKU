@@ -80,4 +80,5 @@ class InventoryEventSchema(OrmSchema):
     quantity_before: int | None
     quantity_after: int | None
     quantity_delta: int | None
+    note: str | None
     created_at: datetime

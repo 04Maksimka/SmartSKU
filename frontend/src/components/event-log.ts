@@ -1,4 +1,4 @@
-import { LitElement, css, html } from "lit";
+import { LitElement, css, html, nothing } from "lit";
 import { repeat } from "lit/directives/repeat.js";
 
 import type { InventoryEvent } from "../api/types";
@@ -127,7 +127,10 @@ export class EventLog extends LitElement {
         <td class="muted nowrap" title=${this.format.date(item.created_at).toLocaleString("ru-RU")}>
           ${this.format.moment(item.created_at)}
         </td>
-        <td><span class="pill ${tone}">${label}</span></td>
+        <td>
+          <span class="pill ${tone}">${label}</span>
+          ${item.note ? html`<div class="muted">${item.note}</div>` : nothing}
+        </td>
         <td class="nowrap">
           <div>${item.component_name ?? html`<span class="muted">не откалибрована</span>`}</div>
           <div class="muted mono">${item.nfc_id ?? ""}</div>

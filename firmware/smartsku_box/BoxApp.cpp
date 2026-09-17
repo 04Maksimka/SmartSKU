@@ -1,6 +1,7 @@
 #include "BoxApp.h"
 
 #include <ArduinoJson.h>
+#include <cmath>
 #include <SPI.h>
 #include <WiFi.h>
 
@@ -122,6 +123,9 @@ void BoxApp::update() {
     lastProvisionRequestMs_ = now;
     requestBoxId();
   }
+  if (online) {
+    publishTareResults();
+  }
   if (online && now - lastTelemetryMs_ >= AppConfig::TELEMETRY_INTERVAL_MS) {
     lastTelemetryMs_ = now;
     publishTelemetry();
@@ -227,7 +231,7 @@ void BoxApp::handleCommand(const String &payload) {
     }
     locker->startCalibration(pieces);
   } else if (command == "tare") {
-    locker->requestTare();
+    startTare(*locker);
   } else if (command == "indicators") {
     String color = doc["led_color"] | "none";
     if (!locker->applyIndicators(color, doc["screen_number"] | 0)) {
@@ -236,6 +240,46 @@ void BoxApp::handleCommand(const String &payload) {
   } else {
     Serial.printf("[app] unknown command %s\n", command.c_str());
   }
+}
+
+void BoxApp::startTare(Locker &locker) {
+  Locker::TareStart result = locker.requestTare();
+  if (result != Locker::TareStart::Started) {
+    publishTareFailure(locker.id(), result);
+  }
+}
+
+// Бэкенд пишет результат в журнал, а фронт по нему убирает подсказку «держите ячейку неподвижно»
+void BoxApp::publishTareResults() {
+  for (auto &locker : lockers_) {
+    double zero = 0;
+    if (!locker->takeTareDone(zero)) {
+      continue;
+    }
+    JsonDocument doc;
+    doc["event"] = "tare_done";
+    doc["box_id"] = boxId_;
+    doc["locker_id"] = locker->id();
+    doc["nfc_id"] = locker->cellUid();
+    doc["tare"] = std::round(zero * 10) / 10;
+    String payload;
+    serializeJson(doc, payload);
+    mqtt_.publish(BoxTopics::events(boxId_), payload);
+  }
+}
+
+void BoxApp::publishTareFailure(uint8_t lockerId, Locker::TareStart result) {
+  if (boxId_.isEmpty() || !mqtt_.connected()) {
+    return;
+  }
+  JsonDocument doc;
+  doc["event"] = "tare_failed";
+  doc["box_id"] = boxId_;
+  doc["locker_id"] = lockerId;
+  doc["reason"] = result == Locker::TareStart::NoCell ? "no_cell" : "load_cell_failed";
+  String payload;
+  serializeJson(doc, payload);
+  mqtt_.publish(BoxTopics::events(boxId_), payload);
 }
 
 Locker *BoxApp::findLocker(int lockerId) {
@@ -250,7 +294,7 @@ void BoxApp::handleConsole(const ConsoleCommand &command) {
     case ConsoleCommand::Type::None:
       break;
     case ConsoleCommand::Type::Tare:
-      lockers_[command.lockerId]->requestTare();
+      startTare(*lockers_[command.lockerId]);
       break;
     case ConsoleCommand::Type::Status:
       printStatus();

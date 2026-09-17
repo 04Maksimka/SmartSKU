@@ -16,6 +16,8 @@ from smartsku_emulator.messaging.contracts import (
     ProvisionRequest,
     ProvisionResponse,
     TareCommand,
+    TareDoneEvent,
+    TareFailedEvent,
 )
 from smartsku_emulator.messaging.topics import MqttTopics
 
@@ -104,12 +106,25 @@ class BoxLink:
                     self._box.apply_calibration(command.locker_id, command.num_of_pieces)
                     logger.info("Box %s locker %s awaits calibration", command.box_id, command.locker_id)
                 elif isinstance(command, TareCommand):
-                    self._box.apply_tare(command.locker_id)
-                    logger.info("Box %s locker %s zero set", command.box_id, command.locker_id)
+                    await self._tare(client, command)
                 else:
                     self._box.apply_indicators(command.locker_id, command.led_color, command.screen_number)
             except (ValidationError, ValueError, EmulatorError) as error:
                 logger.warning("Box %s rejected command: %s", self._box.hardware_id, error)
+
+    async def _tare(self, client: aiomqtt.Client, command: TareCommand) -> None:
+        """Like the firmware, the box reports the result so the backend can log it."""
+        event: TareDoneEvent | TareFailedEvent
+        try:
+            locker = self._box.apply_tare(command.locker_id)
+            event = TareDoneEvent(
+                box_id=command.box_id, locker_id=command.locker_id, nfc_id=locker.cell_nfc_id, tare=locker.tare
+            )
+            logger.info("Box %s locker %s zero set", command.box_id, command.locker_id)
+        except EmulatorError as error:
+            event = TareFailedEvent(box_id=command.box_id, locker_id=command.locker_id, reason="no_cell")
+            logger.warning("Box %s rejected tare: %s", self._box.hardware_id, error)
+        await client.publish(self._topics.box_events(command.box_id), event.model_dump_json(), qos=1)
 
     def _payload(self, message: aiomqtt.Message) -> bytes:
         return message.payload if isinstance(message.payload, bytes) else str(message.payload).encode()

@@ -3,12 +3,13 @@ import logging
 
 import aiomqtt
 from dishka import AsyncContainer
-from pydantic import ValidationError
+from pydantic import TypeAdapter, ValidationError
 
 from smartsku_backend.config import MqttConfig
-from smartsku_backend.messaging.contracts import BoxDataMessage, ProvisionRequest
+from smartsku_backend.messaging.contracts import BoxDataMessage, BoxEvent, ProvisionRequest
 from smartsku_backend.messaging.publisher import MqttConnection
 from smartsku_backend.messaging.topics import MqttTopics
+from smartsku_backend.services.box_events import BoxEventService
 from smartsku_backend.services.box_status import BoxStatusService
 from smartsku_backend.services.provisioning import ProvisioningService
 from smartsku_backend.services.telemetry import TelemetryService
@@ -18,6 +19,8 @@ logger = logging.getLogger(__name__)
 
 class MqttGateway:
     """Keeps the broker connection alive and routes incoming box messages to request-scoped services."""
+
+    EVENT_ADAPTER: TypeAdapter[BoxEvent] = TypeAdapter(BoxEvent)
 
     def __init__(
         self,
@@ -55,6 +58,7 @@ class MqttGateway:
         await client.subscribe(self._topics.provision_request, qos=1)
         await client.subscribe(self._topics.all_box_data, qos=0)
         await client.subscribe(self._topics.all_box_status, qos=1)
+        await client.subscribe(self._topics.all_box_events, qos=1)
 
     async def _dispatch(self, message: aiomqtt.Message) -> None:
         payload = message.payload if isinstance(message.payload, (bytes, str)) else b""
@@ -68,6 +72,9 @@ class MqttGateway:
                     box_id = self._topics.box_id_from_topic(message.topic.value)
                     text = payload.decode() if isinstance(payload, bytes) else payload
                     await status.handle(box_id, text)
+                elif message.topic.matches(self._topics.all_box_events):
+                    events = await scope.get(BoxEventService)
+                    await events.handle(self.EVENT_ADAPTER.validate_json(payload))
                 elif message.topic.matches(self._topics.provision_request):
                     provisioning = await scope.get(ProvisioningService)
                     await provisioning.handle(ProvisionRequest.model_validate_json(payload))

@@ -7,6 +7,7 @@ from smartsku_backend.config import AppConfig, MqttConfig, OnboardingConfig, Tel
 from smartsku_backend.db.database import Database
 from smartsku_backend.messaging.publisher import CommandPublisher, MqttConnection
 from smartsku_backend.messaging.topics import MqttTopics
+from smartsku_backend.services.box_events import BoxEventService
 from smartsku_backend.services.box_status import BoxStatusService
 from smartsku_backend.services.calibration import CalibrationService
 from smartsku_backend.services.indicators import IndicatorPolicy
@@ -57,6 +58,7 @@ class ServicesProvider(Provider):
     request_services = provide_all(
         TelemetryService,
         BoxStatusService,
+        BoxEventService,
         ProvisioningService,
         CalibrationService,
         TareService,

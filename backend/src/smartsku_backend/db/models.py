@@ -102,6 +102,8 @@ class InventoryEventType(StrEnum):
     CELL_INSERTED = "cell_inserted"
     QUANTITY_CHANGED = "quantity_changed"
     CALIBRATED = "calibrated"
+    TARED = "tared"
+    TARE_FAILED = "tare_failed"
 
 
 class InventoryEvent(Base):
@@ -118,6 +120,8 @@ class InventoryEvent(Base):
     weight: Mapped[float] = mapped_column(Float)
     quantity_before: Mapped[int | None] = mapped_column(Integer)
     quantity_after: Mapped[int | None] = mapped_column(Integer)
+    # Human-readable detail, e.g. why the box refused to set the zero
+    note: Mapped[str | None] = mapped_column(String(255))
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=lambda: datetime.now(UTC))
 
     @property

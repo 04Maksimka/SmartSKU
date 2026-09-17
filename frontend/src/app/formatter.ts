@@ -15,6 +15,8 @@ export class Formatter {
     cell_inserted: ["Ячейка вставлена", "info"],
     quantity_changed: ["Изменение количества", "neutral"],
     calibrated: ["Калибровка", "good"],
+    tared: ["Установлен ноль (тара)", "info"],
+    tare_failed: ["Ноль не установлен", "bad"],
   };
 
   private readonly calibrationLabels: Record<CalibrationStatus, [string, Tone]> = {

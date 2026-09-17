@@ -12,6 +12,7 @@ import {
 import type { DashboardSnapshot, DashboardStore, LockerOverview } from "../app/dashboard-store";
 import type { EmulatorStore } from "../app/emulator-store";
 import { Formatter } from "../app/formatter";
+import { TareWatcher } from "../app/tare-watcher";
 import type { BoxSetupDialog } from "./box-setup-dialog";
 import type { CalibrationDialog } from "./calibration-dialog";
 import { Theme } from "./theme";
@@ -142,6 +143,8 @@ export class SkuApp extends LitElement {
 
   private readonly format = new Formatter();
   private unsubscribe: (() => void) | null = null;
+  private readonly tareWatcher = new TareWatcher(this.format);
+  private noticeTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor() {
     super();
@@ -154,7 +157,10 @@ export class SkuApp extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
-    this.unsubscribe = this.store.subscribe((snapshot) => (this.snapshot = snapshot));
+    this.unsubscribe = this.store.subscribe((snapshot) => {
+      this.snapshot = snapshot;
+      this.checkTare();
+    });
     window.addEventListener("hashchange", this.handleHashChange);
     this.syncEmulatorPolling();
     this.addEventListener(DashboardEvents.CALIBRATE, this.handleCalibrate);
@@ -168,6 +174,7 @@ export class SkuApp extends LitElement {
     this.unsubscribe?.();
     window.removeEventListener("hashchange", this.handleHashChange);
     this.emulatorStore?.stop();
+    clearTimeout(this.noticeTimer);
     this.removeEventListener(DashboardEvents.CALIBRATE, this.handleCalibrate);
     this.removeEventListener(DashboardEvents.TARE, this.handleTare);
     this.removeEventListener(DashboardEvents.CANCEL_CALIBRATION, this.handleCancelCalibration);
@@ -209,12 +216,44 @@ export class SkuApp extends LitElement {
     if (!confirm(prompt)) {
       return;
     }
-    this.actionNotice = null;
+    this.showNotice(null);
+    this.tareWatcher.cancel();
     void this.run(async () => {
+      const sentAt = Date.now();
       await this.commands.tare(boxId, lockerId);
-      this.actionNotice = `Команда отправлена боксу ${boxName}. Держите пустую ячейку в слоте ${lockerId} неподвижно около 2 секунд, после этого предупреждение о нуле пропадёт.`;
+      this.tareWatcher.start({ boxId, lockerId, boxName }, sentAt);
+      this.showNotice(
+        `Команда отправлена боксу ${boxName}. Держите пустую ячейку в слоте ${lockerId} неподвижно около 2 секунд.`,
+      );
     });
   };
+
+  /** Replaces the waiting hint once the box confirmed (or refused) the zero. */
+  private checkTare(): void {
+    const outcome = this.tareWatcher.check(this.snapshot.events, Date.now());
+    if (outcome === null) {
+      return;
+    }
+    const { boxName, lockerId } = outcome.request;
+    const place = this.format.location(boxName, lockerId);
+    if (outcome.kind === "done") {
+      this.showNotice(`Ноль установлен: ${place}. Можно класть компоненты.`, 6_000);
+    } else if (outcome.kind === "failed") {
+      this.showNotice(null);
+      this.actionError = `Бокс не установил ноль (${place}): ${outcome.reason}.`;
+    } else {
+      this.showNotice(null);
+      this.actionError = `Бокс ${boxName} не подтвердил установку нуля в слоте ${lockerId}. Проверьте, что он в сети, и повторите.`;
+    }
+  }
+
+  private showNotice(text: string | null, hideAfterMs?: number): void {
+    clearTimeout(this.noticeTimer);
+    this.actionNotice = text;
+    if (text !== null && hideAfterMs !== undefined) {
+      this.noticeTimer = setTimeout(() => (this.actionNotice = null), hideAfterMs);
+    }
+  }
 
   private readonly handleCancelCalibration = (event: Event): void => {
     const request = (event as CustomEvent<CancelCalibrationRequest>).detail;

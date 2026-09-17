@@ -22,6 +22,10 @@ public:
   static String commands(const String &boxId) {
     return box(boxId) + "/commands";
   }
+  // Разовые отчёты бокса: результат установки нуля
+  static String events(const String &boxId) {
+    return box(boxId) + "/events";
+  }
 
 private:
   static String prefix() {

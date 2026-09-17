@@ -80,10 +80,14 @@ void Locker::onWindow() {
   refreshDisplay();
 }
 
-bool Locker::requestTare() {
-  if (!nfc_.present() || loadCell_.failed()) {
-    Serial.printf("[locker %u] tare rejected: insert the empty cell and check HX711\n", id_);
-    return false;
+Locker::TareStart Locker::requestTare() {
+  if (!nfc_.present()) {
+    Serial.printf("[locker %u] tare rejected: insert the empty cell\n", id_);
+    return TareStart::NoCell;
+  }
+  if (loadCell_.failed()) {
+    Serial.printf("[locker %u] tare rejected: no HX711 data\n", id_);
+    return TareStart::LoadCellFailed;
   }
   tareWindowsLeft_ = AppConfig::TARE_WINDOWS;
   tareSum_ = 0;
@@ -92,6 +96,15 @@ bool Locker::requestTare() {
   Serial.printf(
     "[locker %u] taring: keep the empty cell still for %lu ms\n", id_, AppConfig::MEASURE_WINDOW_MS * AppConfig::TARE_WINDOWS
   );
+  return TareStart::Started;
+}
+
+bool Locker::takeTareDone(double &zero) {
+  if (!tareDone_) {
+    return false;
+  }
+  tareDone_ = false;
+  zero = zeroOffset_;
   return true;
 }
 
@@ -102,6 +115,7 @@ void Locker::applyTare() {
   }
   zeroOffset_ = tareSum_ / AppConfig::TARE_WINDOWS;
   hasZero_ = true;
+  tareDone_ = true;
   storage_.saveZero(id_, zeroOffset_);
   reportedWeight_ = 0;
   Serial.printf("[locker %u] zero saved: %.0f. Put something into the cell: net must grow, otherwise set invertLoad\n", id_, zeroOffset_);
