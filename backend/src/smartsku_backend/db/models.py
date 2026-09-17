@@ -32,19 +32,6 @@ class Box(Base):
     status_changed_at: Mapped[datetime | None] = mapped_column(UtcDateTime)
 
 
-class DeletedBox(Base):
-    __tablename__ = "deleted_boxes"
-
-    box_id: Mapped[str] = mapped_column(ForeignKey("boxes.id"), primary_key=True)
-
-
-class DeletedLocker(Base):
-    __tablename__ = "deleted_lockers"
-
-    box_id: Mapped[str] = mapped_column(ForeignKey("boxes.id"), primary_key=True)
-    locker_id: Mapped[int] = mapped_column(Integer, primary_key=True)
-
-
 class Component(Base):
     """What is stored in a physical cell. Keyed by the cell's NFC tag, so it follows the cell between lockers."""
 

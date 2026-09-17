@@ -10,8 +10,6 @@ from smartsku_backend.db.models import (
     Calibration,
     CalibrationStatus,
     Component,
-    DeletedBox,
-    DeletedLocker,
     InventoryEvent,
     InventoryEventType,
     LockerState,
@@ -51,16 +49,6 @@ class TelemetryService:
             return
         if await self._session.get(Box, message.box_id) is None:
             logger.warning("Telemetry from unknown box %s ignored", message.box_id)
-            return
-
-        if await self._session.get(DeletedBox, message.box_id) is not None:
-            return
-        readings = [
-            reading
-            for reading in readings
-            if await self._session.get(DeletedLocker, (message.box_id, reading.locker_id)) is None
-        ]
-        if not readings:
             return
 
         commands = [await self._apply(message.box_id, reading) for reading in readings]

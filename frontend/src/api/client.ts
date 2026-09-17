@@ -22,14 +22,6 @@ export class ApiClient extends HttpClient {
     return this.get(`/api/events?limit=${limit}`);
   }
 
-  deleteBox(boxId: string): Promise<void> {
-    return this.send(`/api/boxes/${encodeURIComponent(boxId)}`, "DELETE");
-  }
-
-  deleteLocker(boxId: string, lockerId: number): Promise<void> {
-    return this.send(`/api/boxes/${encodeURIComponent(boxId)}/lockers/${lockerId}`, "DELETE");
-  }
-
   tare(boxId: string, lockerId: number): Promise<void> {
     return this.send(`/api/boxes/${encodeURIComponent(boxId)}/lockers/${lockerId}/tare`, "POST");
   }

@@ -4,7 +4,7 @@ from uuid import uuid4
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from smartsku_backend.db.models import Box, DeletedBox
+from smartsku_backend.db.models import Box
 from smartsku_backend.messaging.contracts import ProvisionRequest, ProvisionResponse
 from smartsku_backend.messaging.publisher import CommandPublisher
 
@@ -27,7 +27,4 @@ class ProvisioningService:
             self._session.add(box)
             await self._session.commit()
             logger.info("Registered new box %s (hardware %s)", box.id, box.hardware_id)
-        if await self._session.get(DeletedBox, box.id) is not None:
-            logger.info("Provision request from deleted box %s ignored", box.hardware_id)
-            return
         await self._publisher.send_provision_response(ProvisionResponse(hardware_id=box.hardware_id, box_id=box.id))

@@ -13,7 +13,6 @@ from smartsku_backend.api.schemas import (
 )
 from smartsku_backend.db.models import CalibrationStatus
 from smartsku_backend.services.calibration import CalibrationService
-from smartsku_backend.services.deletion import DeletionService
 from smartsku_backend.services.inventory import ComponentService, InventoryQueryService
 from smartsku_backend.services.tare import TareService
 
@@ -22,13 +21,6 @@ class BoxesController:
     def __init__(self) -> None:
         self.router = APIRouter(prefix="/api", tags=["boxes"], route_class=DishkaRoute)
         self.router.add_api_route("/boxes", self.list_boxes, methods=["GET"], response_model=list[BoxSchema])
-        self.router.add_api_route("/boxes/{box_id}", self.delete_box, methods=["DELETE"], status_code=status.HTTP_204_NO_CONTENT)
-        self.router.add_api_route(
-            "/boxes/{box_id}/lockers/{locker_id}",
-            self.delete_locker,
-            methods=["DELETE"],
-            status_code=status.HTTP_204_NO_CONTENT,
-        )
         self.router.add_api_route("/lockers", self.list_lockers, methods=["GET"], response_model=list[LockerSchema])
         self.router.add_api_route(
             "/boxes/{box_id}/lockers/{locker_id}/tare",
@@ -36,12 +28,6 @@ class BoxesController:
             methods=["POST"],
             status_code=status.HTTP_202_ACCEPTED,
         )
-
-    async def delete_box(self, box_id: str, deletion: FromDishka[DeletionService]) -> None:
-        await deletion.box(box_id)
-
-    async def delete_locker(self, box_id: str, locker_id: int, deletion: FromDishka[DeletionService]) -> None:
-        await deletion.locker(box_id, locker_id)
 
     async def tare(self, box_id: str, locker_id: int, tare: FromDishka[TareService]) -> None:
         await tare.send(box_id, locker_id)
