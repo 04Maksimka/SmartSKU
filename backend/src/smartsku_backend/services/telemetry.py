@@ -18,9 +18,9 @@ class TelemetryService:
     """Turns periodic box readings into locker state, inventory events and indicator commands.
 
     The live state (dashboard, displays) follows every reading. The inventory journal records only what held for
-    telemetry.confirm_seconds: a half-pulled cell whose tag flickers or a weight still settling after the cell went
-    in does not produce records. Results of load cell setup and calibrations come as separate box events, see
-    BoxEventService.
+    telemetry.confirm_seconds (a removal — for removal_confirm_seconds): a half-pulled cell whose tag flickers or
+    a weight still settling after the cell went in does not produce records. Results of load cell setup and
+    calibrations come as separate box events, see BoxEventService.
     """
 
     def __init__(
@@ -48,10 +48,7 @@ class TelemetryService:
             for reading in message.lockers
             if self._cache.is_significant(box_id, reading, self._config.weight_change_threshold)
         ]
-        confirmable = any(
-            self._cache.has_confirmed(box_id, reading.locker_id, now, self._config.confirm_seconds)
-            for reading in message.lockers
-        )
+        confirmable = any(self._cache.has_confirmed(box_id, reading.locker_id, now) for reading in message.lockers)
         if not readings and not confirmable:
             return
         if await self._session.get(Box, box_id) is None:
@@ -60,7 +57,7 @@ class TelemetryService:
 
         commands = [await self._apply(box_id, reading, now) for reading in readings]
         for reading in message.lockers:
-            confirmed = self._cache.take_confirmed(box_id, reading.locker_id, now, self._config.confirm_seconds)
+            confirmed = self._cache.take_confirmed(box_id, reading.locker_id, now)
             if confirmed is not None:
                 await self._record(box_id, reading.locker_id, confirmed)
         await self._session.commit()
@@ -96,7 +93,11 @@ class TelemetryService:
         # No quantity (not counted yet, a calibration moves the cell) says nothing about the contents
         quantity_news = observation.quantity is not None and observation.quantity != state.logged_quantity
         if observation.nfc_id != state.logged_nfc_id or quantity_news:
-            self._cache.hold(state.box_id, state.locker_id, observation, now)
+            # An empty slot has no weight to settle: only a flickering tag of a half-pulled cell is filtered out
+            hold_seconds = (
+                self._config.removal_confirm_seconds if observation.nfc_id is None else self._config.confirm_seconds
+            )
+            self._cache.hold(state.box_id, state.locker_id, observation, now, hold_seconds)
         else:
             self._cache.drop_pending(state.box_id, state.locker_id)
 

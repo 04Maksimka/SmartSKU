@@ -40,6 +40,7 @@ class FakeClock:
 
 class TestTelemetryAccounting:
     CONFIRM_SECONDS = 3.0
+    REMOVAL_CONFIRM_SECONDS = 1.0
 
     @pytest.fixture
     async def session(self, tmp_path: Path) -> AsyncIterator[AsyncSession]:
@@ -66,7 +67,11 @@ class TestTelemetryAccounting:
             LockerRuntimeCache(),
             IndicatorPolicy(),
             FakePublisher(),
-            config=TelemetryConfig(weight_change_threshold=0.1, confirm_seconds=self.CONFIRM_SECONDS),
+            config=TelemetryConfig(
+                weight_change_threshold=0.1,
+                confirm_seconds=self.CONFIRM_SECONDS,
+                removal_confirm_seconds=self.REMOVAL_CONFIRM_SECONDS,
+            ),
             clock=clock,
         )
 
@@ -191,10 +196,22 @@ class TestTelemetryAccounting:
         await self._hold(service, clock, self._message(weight=50.0, measurable=True))
         # The tag is at the edge of the field: seen for a moment, while the box is still settling the weight
         for _ in range(5):
-            await self._send(service, clock, self._pulled_out(), seconds=1.0)
+            await self._send(service, clock, self._pulled_out(), seconds=0.5)
             await self._send(service, clock, self._message(weight=0.0, measurable=False), seconds=0.5)
 
         assert await self._events(session) == [(InventoryEventType.CELL_INSERTED, 0, 20)]
+
+    async def test_removal_is_logged_after_a_short_hold(self, session: AsyncSession, clock: FakeClock) -> None:
+        service = self._service(session, clock)
+        await self._hold(service, clock, self._message(weight=50.0, measurable=True))
+        await self._send(service, clock, self._pulled_out(), seconds=0.5)
+        assert await self._events(session) == [(InventoryEventType.CELL_INSERTED, 0, 20)]
+
+        await self._send(service, clock, self._pulled_out(), seconds=0.5)
+        assert await self._events(session) == [
+            (InventoryEventType.CELL_INSERTED, 0, 20),
+            (InventoryEventType.CELL_REMOVED, 20, None),
+        ]
 
     async def test_refill_out_of_the_slot_is_one_removal_and_one_insertion(
         self, session: AsyncSession, clock: FakeClock
