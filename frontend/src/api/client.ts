@@ -1,6 +1,15 @@
 import type { OnboardingSettings } from "./box-setup-types";
 import { HttpClient } from "./http-client";
-import type { Box, Calibration, CalibrationRequest, Component, InventoryEvent, Locker } from "./types";
+import type {
+  Box,
+  Calibration,
+  CalibrationRequest,
+  Component,
+  InventoryEvent,
+  Locker,
+  ScaleAction,
+  ScaleResult,
+} from "./types";
 
 export class ApiClient extends HttpClient {
   boxes(): Promise<Box[]> {
@@ -32,8 +41,9 @@ export class ApiClient extends HttpClient {
     return this.get("/api/onboarding/settings");
   }
 
-  tare(boxId: string, lockerId: number): Promise<void> {
-    return this.send(`/api/boxes/${encodeURIComponent(boxId)}/lockers/${lockerId}/tare`, "POST");
+  /** Waits while the box measures (a few seconds); a box failure comes as an error with the reason. */
+  scale(boxId: string, lockerId: number, action: ScaleAction, grams: number | null): Promise<ScaleResult> {
+    return this.send(`/api/boxes/${encodeURIComponent(boxId)}/lockers/${lockerId}/scale`, "POST", { action, grams });
   }
 
   startCalibration(request: CalibrationRequest): Promise<Calibration> {

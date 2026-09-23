@@ -17,15 +17,40 @@ export interface Component {
   calibrated_at: string;
 }
 
+/** Steps the box reports while it walks through a calibration, see firmware Locker.h. */
+export type CalibrationStep = "remove_cell" | "insert_filled" | "measure_pieces";
+
+export interface CalibrationProgress {
+  step: CalibrationStep;
+  num_of_pieces: number;
+}
+
+/** Load cell setup, one measurement each: see backend messaging/contracts.py ScaleAction. */
+export type ScaleAction = "zero" | "reference" | "cell_tare";
+
+export interface ScaleResult {
+  action: ScaleAction;
+  /** zero: raw reading, reference: counts per gram, cell_tare: grams written to the tag. */
+  value: number;
+  nfc_id: string | null;
+}
+
 export interface Locker {
   box_id: string;
   locker_id: number;
   nfc_flag: boolean;
   nfc_id: string | null;
+  /** Content weight, grams. */
   weight: number;
   quantity: number | null;
-  /** False until the slot's zero (empty cell weight) is set; weight is 0 until then. */
-  zeroed: boolean;
+  /** The load cell has its zero and scale (set up with the reference weight). */
+  slot_ready: boolean;
+  /** The inserted cell has its empty weight in its NFC tag; weight and quantity are counted only then. */
+  cell_tared: boolean;
+  /** The NFC tag of the inserted cell cannot be read. */
+  tag_error: boolean;
+  /** Calibration the box is walking through right now. */
+  calibration: CalibrationProgress | null;
   updated_at: string;
   component: Component | null;
 }
@@ -59,8 +84,11 @@ export type InventoryEventType =
   | "cell_inserted"
   | "quantity_changed"
   | "calibrated"
-  | "tared"
-  | "tare_failed";
+  | "calibration_failed"
+  | "slot_zeroed"
+  | "slot_scaled"
+  | "cell_tared"
+  | "scale_failed";
 
 export interface InventoryEvent {
   id: number;
@@ -73,7 +101,7 @@ export interface InventoryEvent {
   quantity_before: number | null;
   quantity_after: number | null;
   quantity_delta: number | null;
-  /** Detail such as why the box refused to set the zero. */
+  /** Detail such as why the box could not set up the load cell. */
   note: string | null;
   created_at: string;
 }

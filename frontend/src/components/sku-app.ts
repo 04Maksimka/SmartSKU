@@ -1,32 +1,23 @@
 import { LitElement, css, html, nothing } from "lit";
 import { repeat } from "lit/directives/repeat.js";
 
-import type { EmulatorClient } from "../api/emulator-client";
+import type { Calibration } from "../api/types";
 import type { CommandService } from "../app/command-service";
-import {
-  DashboardEvents,
-  type CancelCalibrationRequest,
-  type ReleaseComponentRequest,
-  type TareRequest,
-} from "../app/dashboard-events";
+import { DashboardEvents, type CancelCalibrationRequest, type ReleaseComponentRequest } from "../app/dashboard-events";
 import type { DashboardSnapshot, DashboardStore, LockerOverview } from "../app/dashboard-store";
-import type { EmulatorStore } from "../app/emulator-store";
 import { Formatter } from "../app/formatter";
-import { TareWatcher } from "../app/tare-watcher";
 import type { BoxSetupDialog } from "./box-setup-dialog";
 import type { CalibrationDialog } from "./calibration-dialog";
+import type { ScaleSetupDialog } from "./scale-setup-dialog";
 import { Theme } from "./theme";
 
 export class SkuApp extends LitElement {
   static override properties = {
     store: { attribute: false },
     commands: { attribute: false },
-    emulatorStore: { attribute: false },
-    emulatorApi: { attribute: false },
+    referenceGrams: { attribute: false },
     snapshot: { state: true },
     actionError: { state: true },
-    actionNotice: { state: true },
-    tab: { state: true },
   };
 
   static override styles = [
@@ -65,34 +56,6 @@ export class SkuApp extends LitElement {
         align-items: center;
         gap: 12px;
         flex-wrap: wrap;
-      }
-
-      .tabs {
-        display: flex;
-        gap: 4px;
-        padding: 3px;
-        border-radius: 10px;
-        background: var(--chip);
-      }
-
-      .tabs button {
-        border: none;
-        background: transparent;
-        color: var(--muted);
-      }
-
-      .tabs button.active {
-        background: var(--surface);
-        color: var(--text);
-        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
-      }
-
-      .notice {
-        margin-bottom: 16px;
-        padding: 12px 14px;
-        border-radius: 10px;
-        background: var(--tone-info-bg);
-        color: var(--tone-info);
       }
 
       .error {
@@ -134,37 +97,24 @@ export class SkuApp extends LitElement {
 
   declare store: DashboardStore;
   declare commands: CommandService;
-  declare emulatorStore: EmulatorStore | null;
-  declare emulatorApi: EmulatorClient | null;
+  declare referenceGrams: number;
   declare snapshot: DashboardSnapshot;
   declare actionError: string | null;
-  declare actionNotice: string | null;
-  declare tab: "dashboard" | "emulator";
 
   private readonly format = new Formatter();
   private unsubscribe: (() => void) | null = null;
-  private readonly tareWatcher = new TareWatcher(this.format);
-  private noticeTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor() {
     super();
     this.actionError = null;
-    this.actionNotice = null;
-    this.emulatorStore = null;
-    this.emulatorApi = null;
-    this.tab = location.hash === "#emulator" ? "emulator" : "dashboard";
   }
 
   override connectedCallback(): void {
     super.connectedCallback();
-    this.unsubscribe = this.store.subscribe((snapshot) => {
-      this.snapshot = snapshot;
-      this.checkTare();
-    });
-    window.addEventListener("hashchange", this.handleHashChange);
-    this.syncEmulatorPolling();
+    this.unsubscribe = this.store.subscribe((snapshot) => (this.snapshot = snapshot));
     this.addEventListener(DashboardEvents.CALIBRATE, this.handleCalibrate);
-    this.addEventListener(DashboardEvents.TARE, this.handleTare);
+    this.addEventListener(DashboardEvents.SHOW_CALIBRATION, this.handleShowCalibration);
+    this.addEventListener(DashboardEvents.SCALE_SETUP, this.handleScaleSetup);
     this.addEventListener(DashboardEvents.CANCEL_CALIBRATION, this.handleCancelCalibration);
     this.addEventListener(DashboardEvents.RELEASE_COMPONENT, this.handleReleaseComponent);
   }
@@ -172,36 +122,11 @@ export class SkuApp extends LitElement {
   override disconnectedCallback(): void {
     super.disconnectedCallback();
     this.unsubscribe?.();
-    window.removeEventListener("hashchange", this.handleHashChange);
-    this.emulatorStore?.stop();
-    clearTimeout(this.noticeTimer);
     this.removeEventListener(DashboardEvents.CALIBRATE, this.handleCalibrate);
-    this.removeEventListener(DashboardEvents.TARE, this.handleTare);
+    this.removeEventListener(DashboardEvents.SHOW_CALIBRATION, this.handleShowCalibration);
+    this.removeEventListener(DashboardEvents.SCALE_SETUP, this.handleScaleSetup);
     this.removeEventListener(DashboardEvents.CANCEL_CALIBRATION, this.handleCancelCalibration);
     this.removeEventListener(DashboardEvents.RELEASE_COMPONENT, this.handleReleaseComponent);
-  }
-
-  private readonly handleHashChange = (): void => {
-    this.tab = location.hash === "#emulator" ? "emulator" : "dashboard";
-    this.syncEmulatorPolling();
-  };
-
-  private openTab(tab: "dashboard" | "emulator"): void {
-    location.hash = tab === "emulator" ? "#emulator" : "";
-    this.tab = tab;
-    this.syncEmulatorPolling();
-  }
-
-  /** The emulator is a dev tool: poll it only while its tab is open. */
-  private syncEmulatorPolling(): void {
-    if (this.emulatorStore === null) {
-      return;
-    }
-    if (this.tab === "emulator") {
-      this.emulatorStore.start();
-    } else {
-      this.emulatorStore.stop();
-    }
   }
 
   private readonly handleCalibrate = (event: Event): void => {
@@ -210,49 +135,18 @@ export class SkuApp extends LitElement {
     void this.openDialog(locker);
   };
 
-  private readonly handleTare = (event: Event): void => {
-    const { boxId, lockerId, boxName } = (event as CustomEvent<TareRequest>).detail;
-    const prompt = `Вставлена ли пустая ячейка в слот ${this.format.slot(lockerId)} бокса ${boxName}? Уберите из неё все предметы и не трогайте примерно 2 секунды после подтверждения.`;
-    if (!confirm(prompt)) {
-      return;
-    }
-    this.showNotice(null);
-    this.tareWatcher.cancel();
-    void this.run(async () => {
-      const sentAt = Date.now();
-      await this.commands.tare(boxId, lockerId);
-      this.tareWatcher.start({ boxId, lockerId, boxName }, sentAt);
-      this.showNotice(
-        `Команда отправлена боксу ${boxName}. Держите пустую ячейку в слоте ${lockerId} неподвижно около 2 секунд.`,
-      );
-    });
+  private readonly handleShowCalibration = (event: Event): void => {
+    const calibration = (event as CustomEvent<Calibration>).detail;
+    this.renderRoot.querySelector<CalibrationDialog>("sku-calibration-dialog")?.openProgress(calibration);
   };
 
-  /** Replaces the waiting hint once the box confirmed (or refused) the zero. */
-  private checkTare(): void {
-    const outcome = this.tareWatcher.check(this.snapshot.events, Date.now());
-    if (outcome === null) {
-      return;
-    }
-    const { boxName, lockerId } = outcome.request;
-    const place = this.format.location(boxName, lockerId);
-    if (outcome.kind === "done") {
-      this.showNotice(`Ноль установлен: ${place}. Можно класть компоненты.`, 6_000);
-    } else if (outcome.kind === "failed") {
-      this.showNotice(null);
-      this.actionError = `Бокс не установил ноль (${place}): ${outcome.reason}.`;
-    } else {
-      this.showNotice(null);
-      this.actionError = `Бокс ${boxName} не подтвердил установку нуля в слоте ${lockerId}. Проверьте, что он в сети, и повторите.`;
-    }
-  }
+  private readonly handleScaleSetup = (event: Event): void => {
+    this.openScaleSetup((event as CustomEvent<LockerOverview>).detail);
+  };
 
-  private showNotice(text: string | null, hideAfterMs?: number): void {
-    clearTimeout(this.noticeTimer);
-    this.actionNotice = text;
-    if (text !== null && hideAfterMs !== undefined) {
-      this.noticeTimer = setTimeout(() => (this.actionNotice = null), hideAfterMs);
-    }
+  private openScaleSetup(locker: LockerOverview | null): void {
+    this.actionError = null;
+    this.renderRoot.querySelector<ScaleSetupDialog>("sku-scale-setup-dialog")?.open(locker);
   }
 
   private readonly handleCancelCalibration = (event: Event): void => {
@@ -297,31 +191,16 @@ export class SkuApp extends LitElement {
       <header>
         <h1>SmartSKU</h1>
         <div class="toolbar">
-          ${this.emulatorStore
-            ? html`<div class="tabs">
-                <button
-                  class=${this.tab === "dashboard" ? "active" : ""}
-                  @click=${() => this.openTab("dashboard")}
-                >
-                  Склад
-                </button>
-                <button
-                  class=${this.tab === "emulator" ? "active" : ""}
-                  @click=${() => this.openTab("emulator")}
-                >
-                  Эмулятор
-                </button>
-              </div>`
-            : nothing}
-          ${this.tab === "dashboard"
-            ? html`<button @click=${this.openSetup}>Подключить бокс</button>
-                <button class="primary" @click=${() => void this.openDialog(null)}>Калибровка</button>`
-            : nothing}
+          <button @click=${this.openSetup}>Подключить бокс</button>
+          <button title="Ноль и гиря для тензодатчиков, вес пустых ячеек" @click=${() => this.openScaleSetup(null)}>
+            Настройка весов
+          </button>
+          <button class="primary" @click=${() => void this.openDialog(null)}>Калибровка</button>
           ${this.renderStatus()}
         </div>
       </header>
 
-      ${this.tab === "emulator" ? this.renderEmulator() : this.renderDashboard()}
+      ${this.renderDashboard()}
     `;
   }
 
@@ -340,19 +219,10 @@ export class SkuApp extends LitElement {
     `;
   }
 
-  private renderEmulator() {
-    return html`<sku-emulator-panel
-      .store=${this.emulatorStore}
-      .api=${this.emulatorApi}
-      .commands=${this.commands}
-    ></sku-emulator-panel>`;
-  }
-
   private renderDashboard() {
     const snapshot = this.snapshot;
     return html`
       ${this.actionError ? html`<div class="error">${this.actionError}</div>` : nothing}
-      ${this.actionNotice ? html`<div class="notice">${this.actionNotice}</div>` : nothing}
       ${snapshot.error
         ? html`<div class="error">Не удалось обновить данные: ${snapshot.error}. Показаны последние полученные.</div>`
         : nothing}
@@ -370,9 +240,6 @@ export class SkuApp extends LitElement {
           : html`<div class="card empty empty-state">
               <div>Устройств нет. Зажмите BOOT на плате бокса на 3 секунды и подключите его по Bluetooth.</div>
               <button class="primary" @click=${this.openSetup}>Подключить бокс</button>
-              ${this.emulatorStore
-                ? html`<div class="muted">Или добавьте виртуальный бокс на вкладке «Эмулятор».</div>`
-                : nothing}
             </div>`}
       </section>
 
@@ -387,8 +254,15 @@ export class SkuApp extends LitElement {
       <sku-calibration-dialog
         .lockers=${this.lockers()}
         .calibrations=${snapshot.calibrations}
+        .events=${snapshot.events}
         .service=${this.commands}
       ></sku-calibration-dialog>
+
+      <sku-scale-setup-dialog
+        .boxes=${snapshot.boxes}
+        .service=${this.commands}
+        .referenceGrams=${this.referenceGrams}
+      ></sku-scale-setup-dialog>
 
       <sku-box-setup-dialog .service=${this.commands}></sku-box-setup-dialog>
 

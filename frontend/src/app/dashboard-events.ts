@@ -1,10 +1,5 @@
+import type { Calibration } from "../api/types";
 import type { LockerOverview } from "./dashboard-store";
-
-export interface TareRequest {
-  boxId: string;
-  lockerId: number;
-  boxName: string;
-}
 
 export interface CancelCalibrationRequest {
   id: number;
@@ -16,10 +11,11 @@ export interface ReleaseComponentRequest {
   label: string;
 }
 
-/** Actions travel from the tiles and tables up to sku-app, which owns the CommandService. */
+/** Actions travel from the tiles and tables up to sku-app, which owns the CommandService and the dialogs. */
 export class DashboardEvents {
   static readonly CALIBRATE = "sku-calibrate";
-  static readonly TARE = "sku-tare";
+  static readonly SHOW_CALIBRATION = "sku-show-calibration";
+  static readonly SCALE_SETUP = "sku-scale-setup";
   static readonly CANCEL_CALIBRATION = "sku-cancel-calibration";
   static readonly RELEASE_COMPONENT = "sku-release-component";
 
@@ -27,8 +23,14 @@ export class DashboardEvents {
     this.dispatch(target, DashboardEvents.CALIBRATE, locker);
   }
 
-  tare(target: EventTarget, request: TareRequest): void {
-    this.dispatch(target, DashboardEvents.TARE, request);
+  /** Reopens the checklist of a running calibration. */
+  showCalibration(target: EventTarget, calibration: Calibration): void {
+    this.dispatch(target, DashboardEvents.SHOW_CALIBRATION, calibration);
+  }
+
+  /** Opens the load cell setup for this locker only, starting with what it lacks. */
+  scaleSetup(target: EventTarget, locker: LockerOverview): void {
+    this.dispatch(target, DashboardEvents.SCALE_SETUP, locker);
   }
 
   cancelCalibration(target: EventTarget, request: CancelCalibrationRequest): void {

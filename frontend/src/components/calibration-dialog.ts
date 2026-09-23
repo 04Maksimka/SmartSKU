@@ -1,18 +1,23 @@
 import { LitElement, css, html, nothing } from "lit";
 
-import type { Calibration } from "../api/types";
+import type { Calibration, CalibrationStep, InventoryEvent } from "../api/types";
 import type { CommandService } from "../app/command-service";
 import type { LockerOverview } from "../app/dashboard-store";
 import { Formatter } from "../app/formatter";
+import { CalibrationPlan, type CalibrationProgressState } from "../app/calibration-plan";
 import { Theme } from "./theme";
 
 type Step = "pick" | "form" | "await";
 
-/** The calibration scenario from CLAUDE.md: pick a free locker, name the component, pour N pieces, insert. */
+/**
+ * The calibration scenario from CLAUDE.md: pick a free locker, name the component, pour N pieces, insert.
+ * The cell must already know its empty weight (load cell setup, "cells" step).
+ */
 export class CalibrationDialog extends LitElement {
   static override properties = {
     lockers: { attribute: false },
     calibrations: { attribute: false },
+    events: { attribute: false },
     service: { attribute: false },
     step: { state: true },
     selected: { state: true },
@@ -130,6 +135,7 @@ export class CalibrationDialog extends LitElement {
 
   declare lockers: LockerOverview[];
   declare calibrations: Calibration[];
+  declare events: InventoryEvent[];
   declare service: CommandService;
   declare step: Step;
   declare selected: LockerOverview | null;
@@ -141,11 +147,13 @@ export class CalibrationDialog extends LitElement {
   declare busy: boolean;
 
   private readonly format = new Formatter();
+  private lastStep: CalibrationStep | null = null;
 
   constructor() {
     super();
     this.lockers = [];
     this.calibrations = [];
+    this.events = [];
     this.step = "pick";
     this.selected = null;
     this.name = "";
@@ -166,8 +174,21 @@ export class CalibrationDialog extends LitElement {
     this.startedId = null;
     this.error = null;
     this.busy = false;
+    this.lastStep = null;
     this.dialog()?.showModal();
     void this.focusName();
+  }
+
+  /** Reopens the checklist of a calibration that is already running. */
+  openProgress(calibration: Calibration): void {
+    const overview = this.lockerOf(calibration);
+    this.selected = overview ?? null;
+    this.startedId = calibration.id;
+    this.step = "await";
+    this.error = null;
+    this.busy = false;
+    this.lastStep = overview?.locker.calibration?.step ?? null;
+    this.dialog()?.showModal();
   }
 
   protected override render() {
@@ -203,17 +224,15 @@ export class CalibrationDialog extends LitElement {
                 >
                   <span>
                     <strong>${this.format.location(item.boxName, item.locker.locker_id)}</strong><br />
-                    <span class="muted mono">${item.locker.nfc_id ?? "ячейка извлечена"}</span>
-                  </span>
-                  <span class="pill ${item.locker.nfc_flag ? "good" : "warn"}">
-                    ${item.locker.nfc_flag ? "● на месте" : "○ извлечена"}
+                    <span class="muted mono">${item.locker.nfc_id}</span>
                   </span>
                 </button>
               `,
             )}
           </div>`
         : html`<div class="note warn">
-            Свободных ячеек нет. Освободите ячейку на карточке слота или подключите бокс.
+            Свободных ячеек нет. Вставьте ячейку в слот, освободите занятую на карточке слота или подключите бокс.
+            Ячейка должна быть взвешена пустой, а слот — настроен: «Настройка весов».
           </div>`}
       <div class="actions"><button @click=${() => this.close()}>Закрыть</button></div>
     `;
@@ -275,11 +294,22 @@ export class CalibrationDialog extends LitElement {
         <div class="actions"><button @click=${() => this.close()}>Закрыть</button></div>`;
     }
     const where = this.format.location(this.boxName(calibration.box_id), calibration.locker_id);
+    const progress = this.lockerOf(calibration)?.locker.calibration;
+    if (progress && calibration.status === "pending") {
+      this.lastStep = progress.step;
+    }
+    const plan = new CalibrationPlan(calibration.num_of_pieces, calibration.name);
+    const failure = calibration.status === "cancelled" ? this.failureOf(calibration) : undefined;
+    const checklist = html`<sku-procedure-checklist
+      .items=${plan.items(this.progressOf(calibration, failure))}
+    ></sku-procedure-checklist>`;
+
     if (calibration.status === "completed") {
       return html`
-        <h2>Калибровка завершена</h2>
+        <h2>Калибровка завершена · ${where}</h2>
+        ${checklist}
         <div class="note good">
-          «${calibration.name}» в ${where}: 1 шт =
+          «${calibration.name}»: 1 шт =
           ${calibration.piece_weight === null ? "—" : this.format.pieceWeight(calibration.piece_weight)}.
         </div>
         <div class="actions"><button class="primary" @click=${() => this.close()}>Готово</button></div>
@@ -287,23 +317,19 @@ export class CalibrationDialog extends LitElement {
     }
     if (calibration.status === "cancelled") {
       return html`
-        <h2>Калибровка отменена</h2>
-        <div class="note warn">Заявка на ${where} отменена.</div>
+        <h2>${failure ? "Калибровка не удалась" : "Калибровка отменена"} · ${where}</h2>
+        ${checklist}
+        <div class="${failure ? "error" : "note warn"}">
+          ${failure?.note ?? "Заявка отменена, бокс вернулся к обычной работе."}
+        </div>
         <div class="actions"><button @click=${() => this.close()}>Закрыть</button></div>
       `;
     }
     return html`
-      <h2>Насыпьте компоненты</h2>
-      <ol>
-        <li>Вытащите ячейку из слота ${this.format.slot(calibration.locker_id)} бокса ${this.boxName(calibration.box_id)}.</li>
-        <li>Насыпьте ровно ${calibration.num_of_pieces} шт. «${calibration.name}».</li>
-        <li>Вставьте ячейку обратно — остальное бокс посчитает сам.</li>
-      </ol>
-      <div class="note">
-        Окно можно закрыть, статус виден на карточке слота. В эмуляторе те же шаги — ручки
-        <span class="mono">pull-out</span>, <span class="mono">cells/{nfc_id}/grams</span>,
-        <span class="mono">insert</span>.
-      </div>
+      <h2>Калибровка «${calibration.name}» · ${where}</h2>
+      ${checklist}
+      ${this.lastStep === null ? html`<div class="note">Ждём ответа бокса…</div>` : nothing}
+      <div class="note">Окно можно закрыть: текущий шаг виден на карточке слота.</div>
       ${this.error ? html`<div class="error">${this.error}</div>` : nothing}
       <div class="actions">
         <button ?disabled=${this.busy} @click=${() => void this.cancel(calibration.id)}>Отменить калибровку</button>
@@ -312,9 +338,44 @@ export class CalibrationDialog extends LitElement {
     `;
   }
 
+  private progressOf(calibration: Calibration, failure: InventoryEvent | undefined): CalibrationProgressState {
+    if (calibration.status === "completed") {
+      return { kind: "done" };
+    }
+    if (calibration.status === "cancelled") {
+      return { kind: "failed", step: failure ? this.lastStep : null };
+    }
+    return this.lastStep ? { kind: "running", step: this.lastStep } : { kind: "sent" };
+  }
+
+  /** Why the box gave up, when it did: a cancelled request without this event was cancelled by the user. */
+  private failureOf(calibration: Calibration): InventoryEvent | undefined {
+    const createdAt = this.format.date(calibration.created_at).getTime();
+    return this.events.find(
+      (event) =>
+        event.event_type === "calibration_failed" &&
+        event.box_id === calibration.box_id &&
+        event.locker_id === calibration.locker_id &&
+        this.format.date(event.created_at).getTime() >= createdAt,
+    );
+  }
+
+  private lockerOf(calibration: Calibration): LockerOverview | undefined {
+    return this.lockers.find(
+      (item) => item.locker.box_id === calibration.box_id && item.locker.locker_id === calibration.locker_id,
+    );
+  }
+
+  /** Inserted cells that know their empty weight, in set-up slots, and hold nothing yet. */
   private freeLockers(): LockerOverview[] {
     return this.lockers.filter(
-      (item) => item.locker.zeroed && item.locker.component === null && item.pendingCalibration === null,
+      (item) =>
+        item.locker.nfc_flag &&
+        item.locker.slot_ready &&
+        item.locker.cell_tared &&
+        item.locker.component === null &&
+        item.locker.calibration === null &&
+        item.pendingCalibration === null,
     );
   }
 
@@ -356,6 +417,7 @@ export class CalibrationDialog extends LitElement {
           .filter((tag) => tag.length > 0),
         num_of_pieces: pieces,
       });
+      this.lastStep = null;
       this.startedId = calibration.id;
       this.step = "await";
     } catch (error) {

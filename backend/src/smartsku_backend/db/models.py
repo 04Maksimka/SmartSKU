@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from enum import StrEnum
 
-from sqlalchemy import JSON, DateTime, Dialect, Enum, Float, ForeignKey, Integer, String, TypeDecorator, true
+from sqlalchemy import JSON, DateTime, Dialect, Enum, Float, ForeignKey, Integer, String, TypeDecorator, false
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -67,9 +67,13 @@ class LockerState(Base):
     nfc_flag: Mapped[bool] = mapped_column(default=False)
     nfc_id: Mapped[str | None] = mapped_column(String(64))
     weight: Mapped[float] = mapped_column(Float, default=0.0)
-    reported_piece_weight: Mapped[float] = mapped_column(Float, default=0.0)
     quantity: Mapped[int | None] = mapped_column(Integer)
-    zeroed: Mapped[bool] = mapped_column(default=True, server_default=true())
+    slot_ready: Mapped[bool] = mapped_column(default=False, server_default=false())
+    cell_tared: Mapped[bool] = mapped_column(default=False, server_default=false())
+    tag_error: Mapped[bool] = mapped_column(default=False, server_default=false())
+    # Calibration the box is walking through: the step it waits for and the portion size
+    calibration_step: Mapped[str | None] = mapped_column(String(32))
+    calibration_pieces: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     updated_at: Mapped[datetime] = mapped_column(UtcDateTime, default=lambda: datetime.now(UTC))
 
 
@@ -102,8 +106,11 @@ class InventoryEventType(StrEnum):
     CELL_INSERTED = "cell_inserted"
     QUANTITY_CHANGED = "quantity_changed"
     CALIBRATED = "calibrated"
-    TARED = "tared"
-    TARE_FAILED = "tare_failed"
+    CALIBRATION_FAILED = "calibration_failed"
+    SLOT_ZEROED = "slot_zeroed"
+    SLOT_SCALED = "slot_scaled"
+    CELL_TARED = "cell_tared"
+    SCALE_FAILED = "scale_failed"
 
 
 class InventoryEvent(Base):
@@ -120,7 +127,7 @@ class InventoryEvent(Base):
     weight: Mapped[float] = mapped_column(Float)
     quantity_before: Mapped[int | None] = mapped_column(Integer)
     quantity_after: Mapped[int | None] = mapped_column(Integer)
-    # Human-readable detail, e.g. why the box refused to set the zero
+    # Human-readable detail, e.g. why the box could not set up the load cell
     note: Mapped[str | None] = mapped_column(String(255))
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=lambda: datetime.now(UTC))
 

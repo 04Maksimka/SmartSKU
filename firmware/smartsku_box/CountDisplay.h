@@ -42,6 +42,23 @@ public:
     showBytes(0x00, 0x79, 0x50, 0x50);  // " Err"
   }
 
+  // Подсказки настройки весов и калибровки, те же надписи описаны на фронте
+  void showPullOut() {
+    showBytes(0x3F, 0x3E, 0x78, 0x00);  // "OUt "
+  }
+
+  void showInsert() {
+    showBytes(0x00, 0x06, 0x54, 0x00);  // " In "
+  }
+
+  void showHold() {
+    showBytes(0x76, 0x3F, 0x38, 0x5E);  // "HOLd"
+  }
+
+  void showDone() {
+    showBytes(0x5E, 0x5C, 0x54, 0x79);  // "donE"
+  }
+
 private:
   enum class Shown { Nothing, Number, Bytes };
 

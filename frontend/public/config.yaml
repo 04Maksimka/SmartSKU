@@ -1,8 +1,6 @@
 # Runtime config: served next to the page, can be replaced without rebuilding (see docker-compose volume)
 # Empty string: same origin, requests go through the vite dev proxy or nginx
 api_base_url: ""
-# Emulator API behind the same origin; set to "" to hide the emulator tab (real boxes, no emulator)
-emulator_base_url: "/emulator-api"
 # How often the dashboard re-reads the backend
 refresh_interval_ms: 1000
 # How many latest inventory events the log keeps
@@ -12,3 +10,5 @@ calibrations_limit: 20
 # Slots on a box card are laid out like in the real box, seen from the front: locker_id 0, 1, ... left to right,
 # top to bottom, this many per row. The prototype box is 2x2: slots 1 2 / 3 4 (labels are locker_id + 1)
 box_columns: 2
+# Reference weight for the load cell setup ("Настройка весов"), grams
+reference_grams: 100

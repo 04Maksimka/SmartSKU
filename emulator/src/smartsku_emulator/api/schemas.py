@@ -14,7 +14,7 @@ class LockerView(BaseModel):
     pending_calibration: int | None
     zeroed: bool = Field(description="false: the slot has no zero yet and reports weight 0")
     led_color: str
-    screen_number: int
+    screen_number: int | None = Field(description="null: the display shows dashes")
 
 
 class BoxView(BaseModel):

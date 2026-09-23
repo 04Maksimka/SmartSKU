@@ -17,9 +17,12 @@ mqtt:
   keepalive_seconds: 30
 
 telemetry:
-  # Weight is in arbitrary units (real boxes: raw HX711 counts, they filter their own noise; emulator: grams).
-  # Weight changes below this value are not treated as a state change
-  weight_change_threshold: 0.5
+  # Grams. Boxes filter their own noise (report steps of 0.5 g or half a piece), so this only drops float jitter
+  weight_change_threshold: 0.05
+
+scale:
+  # Load cell setup from the dashboard: how long a request waits for the box to measure
+  answer_timeout_seconds: 10
 
 onboarding:
   # Broker address sent to a box connected from the dashboard over Bluetooth: IP or name.local of this computer.

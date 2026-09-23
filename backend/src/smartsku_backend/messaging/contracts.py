@@ -10,20 +10,45 @@ class LedColor(StrEnum):
     NONE = "none"
 
 
+class CalibrationStep(StrEnum):
+    """Steps the box walks through by itself during a calibration, watching NFC and the load cell."""
+
+    REMOVE_CELL = "remove_cell"
+    INSERT_FILLED = "insert_filled"
+    MEASURE_PIECES = "measure_pieces"
+
+
+class CalibrationProgress(BaseModel):
+    step: CalibrationStep
+    num_of_pieces: int = 0
+
+
 class LockerReading(BaseModel):
     locker_id: int
     nfc_flag: bool
     nfc_id: str | None = None
+    # Content weight in grams: without the cell's own weight (tare)
     weight: float
+    # Grams, from the cell's NFC tag
     piece_weight: float
     number_of_pieces: int
-    # False until the slot's zero (empty cell weight) is set; weight is meaningless until then
-    zeroed: bool = True
+    # The load cell has its zero and scale (set up with the reference weight)
+    slot_ready: bool = False
+    # The inserted cell has its tare in the NFC tag
+    cell_tared: bool = False
+    # The tag of the inserted cell cannot be read or written
+    tag_error: bool = False
+    calibration: CalibrationProgress | None = None
 
     @field_validator("nfc_id")
     @classmethod
     def empty_nfc_id_is_none(cls, value: str | None) -> str | None:
         return value or None
+
+    @property
+    def measurable(self) -> bool:
+        """Weight means something only for a tared cell in a ready slot, and not while a calibration moves it."""
+        return self.nfc_flag and self.slot_ready and self.cell_tared and self.calibration is None
 
 
 class BoxDataMessage(BaseModel):
@@ -38,35 +63,73 @@ class CalibrationCommand(BaseModel):
     num_of_pieces: int = Field(gt=0)
 
 
-class TareCommand(BaseModel):
-    command: Literal["tare"] = "tare"
+class ScaleAction(StrEnum):
+    """Load cell setup, one measurement of a settled weight each (see firmware Locker.h)."""
+
+    # The cell is pulled out, nothing on the slot
+    ZERO = "zero"
+    # The reference weight on the zeroed empty slot: counts per gram, its sign is the load cell direction
+    REFERENCE = "reference"
+    # The inserted cell is empty: its weight goes to its NFC tag
+    CELL_TARE = "cell_tare"
+
+
+class ScaleCommand(BaseModel):
+    command: Literal["scale"] = "scale"
+    box_id: str
+    locker_id: int
+    action: ScaleAction
+    # Reference weight, only for REFERENCE
+    grams: float | None = None
+
+
+class CancelCommand(BaseModel):
+    """Stops a calibration the box is walking through."""
+
+    command: Literal["cancel"] = "cancel"
     box_id: str
     locker_id: int
 
 
-class TareDoneEvent(BaseModel):
-    event: Literal["tare_done"]
+class ScaleDoneEvent(BaseModel):
+    event: Literal["scale_done"]
     box_id: str
     locker_id: int
+    action: ScaleAction
+    # ZERO: raw reading, REFERENCE: counts per gram, CELL_TARE: grams written to the tag
+    value: float
     nfc_id: str | None = None
-    # New zero in the box's weight units (raw load cell reading with the empty cell)
-    tare: float
-
-    @field_validator("nfc_id")
-    @classmethod
-    def empty_nfc_id_is_none(cls, value: str | None) -> str | None:
-        return value or None
 
 
-class TareFailedEvent(BaseModel):
-    event: Literal["tare_failed"]
+class ScaleFailedEvent(BaseModel):
+    event: Literal["scale_failed"]
     box_id: str
     locker_id: int
-    # no_cell | load_cell_failed
+    action: ScaleAction
     reason: str
 
 
-BoxEvent = Annotated[TareDoneEvent | TareFailedEvent, Field(discriminator="event")]
+class CalibrationDoneEvent(BaseModel):
+    event: Literal["calibration_done"]
+    box_id: str
+    locker_id: int
+    nfc_id: str
+    # Grams
+    piece_weight: float
+    # Weight of the calibration portion, grams
+    weight: float
+
+
+class CalibrationFailedEvent(BaseModel):
+    event: Literal["calibration_failed"]
+    box_id: str
+    locker_id: int
+    reason: str
+
+
+BoxEvent = Annotated[
+    ScaleDoneEvent | ScaleFailedEvent | CalibrationDoneEvent | CalibrationFailedEvent, Field(discriminator="event")
+]
 
 
 class IndicatorsCommand(BaseModel):
@@ -74,7 +137,8 @@ class IndicatorsCommand(BaseModel):
     box_id: str
     locker_id: int
     led_color: LedColor
-    screen_number: int
+    # None: the display shows dashes (no cell, or the cell has no tare or is not calibrated)
+    screen_number: int | None
 
 
 class ProvisionRequest(BaseModel):

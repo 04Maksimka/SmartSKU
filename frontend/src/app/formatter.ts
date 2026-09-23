@@ -15,8 +15,11 @@ export class Formatter {
     cell_inserted: ["Ячейка вставлена", "info"],
     quantity_changed: ["Изменение количества", "neutral"],
     calibrated: ["Калибровка", "good"],
-    tared: ["Установлен ноль (тара)", "info"],
-    tare_failed: ["Ноль не установлен", "bad"],
+    calibration_failed: ["Калибровка не удалась", "bad"],
+    slot_zeroed: ["Ноль слота", "info"],
+    slot_scaled: ["Слот настроен гирей", "info"],
+    cell_tared: ["Ячейка взвешена пустой", "info"],
+    scale_failed: ["Настройка весов не удалась", "bad"],
   };
 
   private readonly calibrationLabels: Record<CalibrationStatus, [string, Tone]> = {
@@ -41,13 +44,13 @@ export class Formatter {
     return date.toDateString() === new Date().toDateString() ? time : `${this.dateFormat.format(date)} ${time}`;
   }
 
-  /** Weight is in arbitrary units: raw load cell counts on real boxes, grams in the emulator. */
+  /** Weight is in grams: every load cell is set up with the reference weight. */
   weight(value: number): string {
-    return `${value.toLocaleString("ru-RU", { maximumFractionDigits: 1 })} ед.`;
+    return `${value.toLocaleString("ru-RU", { maximumFractionDigits: 1 })} г`;
   }
 
   pieceWeight(value: number): string {
-    return `${value.toLocaleString("ru-RU", { maximumFractionDigits: 3 })} ед.`;
+    return `${value.toLocaleString("ru-RU", { maximumFractionDigits: 3 })} г`;
   }
 
   pieces(value: number | null): string {

@@ -9,10 +9,13 @@ class TestIndicatorPolicy:
         command = IndicatorPolicy().build("box", 0, True, 3)
         assert (command.led_color, command.screen_number) == (LedColor.NONE, 3)
 
-    def test_removed_or_uncalibrated_cell_shows_zero(self) -> None:
+    def test_removed_or_uncalibrated_cell_shows_dashes(self) -> None:
         policy = IndicatorPolicy()
-        assert policy.build("box", 0, False, 10).screen_number == 0
-        assert policy.build("box", 0, True, None).screen_number == 0
+        assert policy.build("box", 0, False, 10).screen_number is None
+        assert policy.build("box", 0, True, None).screen_number is None
+
+    def test_calibrated_empty_cell_shows_zero(self) -> None:
+        assert IndicatorPolicy().build("box", 0, True, 0).screen_number == 0
 
 
 class TestComponent:

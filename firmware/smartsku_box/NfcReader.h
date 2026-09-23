@@ -3,11 +3,19 @@
 #include <Arduino.h>
 #include <MFRC522.h>
 
+#include "CellTag.h"
+
 // Считыватель RC522 одной ячейки. В отличие от PICC_IsNewCardPresent замечает и исчезновение метки:
 // каждый опрос будит метку командой WUPA (она отвечает, даже если после прошлого чтения ушла в HALT).
-// Антенна включена только во время опроса: считыватели стоят рядом и иначе мешают друг другу
+// Антенна включена только во время опроса: считыватели стоят рядом и иначе мешают друг другу.
+// Данные ячейки (CellTag) читаются из метки сразу при вставке и пишутся в неё по запросу — в тех же опросах
 class NfcReader {
 public:
+  // Reading — метку только что вставили, данные ещё не прочитаны; Unsupported — метка не MIFARE Classic/Ultralight
+  // или не читается (другой ключ, брак)
+  enum class TagState { NoCell, Reading, Ready, Unsupported };
+  enum class WriteResult { None, Done, Failed };
+
   explicit NfcReader(int8_t ssPin);
 
   // До SPI.begin() и до begin() любого считывателя: SS всех чипов в HIGH, иначе неинициализированный чип
@@ -32,12 +40,31 @@ public:
   bool chipFound() const {
     return chipFound_;
   }
+  TagState tagState() const {
+    return tagState_;
+  }
+  // Данные вставленной ячейки; пустые, пока tagState() != Ready
+  const CellTag &tag() const {
+    return tag_;
+  }
+  // Записать данные в метку вставленной ячейки при ближайших опросах; итог — takeWriteResult()
+  void requestWrite(const CellTag &tag);
+  WriteResult takeWriteResult();
   // Диагностика для строки показаний: опросы и находки с прошлого вызова, код последнего опроса,
   // отвечает ли чип сейчас. Счётчики сбрасываются
   String takeDiagnostics();
 
 private:
-  bool poll(String &uid);
+  enum class TagKind { Classic, Ultralight, Other };
+
+  bool select(String &uid);
+  void release(bool selected);
+  void readTag();
+  void writeTag();
+  bool readBlock(uint8_t *data);
+  bool writeBlock(const uint8_t *data);
+  bool authenticate();
+  void finishWrite(WriteResult result);
   void init();
   static String formatUid(const MFRC522::Uid &uid);
 
@@ -53,4 +80,13 @@ private:
   MFRC522::StatusCode lastStatus_ = MFRC522::STATUS_OK;
   byte lastErrorReg_ = 0;
   uint8_t errorsInRow_ = 0;
+
+  TagKind tagKind_ = TagKind::Other;
+  TagState tagState_ = TagState::NoCell;
+  CellTag tag_;
+  uint8_t readAttempts_ = 0;
+  bool writePending_ = false;
+  CellTag pendingTag_;
+  uint8_t writeAttempts_ = 0;
+  WriteResult writeResult_ = WriteResult::None;
 };

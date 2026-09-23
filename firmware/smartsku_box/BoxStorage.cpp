@@ -44,39 +44,27 @@ void BoxStorage::resetKeepingNetwork() {
   saveNetworkSettings(settings);
 }
 
-bool BoxStorage::loadZero(uint8_t lockerId, double &zeroOffset) {
-  String key = zeroKey(lockerId);
-  if (!prefs_.isKey(key.c_str())) {
+bool BoxStorage::loadZero(uint8_t lockerId, double &raw) {
+  String name = key("zero", lockerId);
+  if (!prefs_.isKey(name.c_str())) {
     return false;
   }
-  zeroOffset = prefs_.getDouble(key.c_str(), 0);
+  raw = prefs_.getDouble(name.c_str(), 0);
   return true;
 }
 
-void BoxStorage::saveZero(uint8_t lockerId, double zeroOffset) {
-  prefs_.putDouble(zeroKey(lockerId).c_str(), zeroOffset);
+void BoxStorage::saveZero(uint8_t lockerId, double raw) {
+  prefs_.putDouble(key("zero", lockerId).c_str(), raw);
 }
 
-double BoxStorage::pieceWeight(const String &nfcId) {
-  return prefs_.getDouble(pieceWeightKey(nfcId).c_str(), 0);
+double BoxStorage::countsPerGram(uint8_t lockerId) {
+  return prefs_.getDouble(key("scale", lockerId).c_str(), 0);
 }
 
-void BoxStorage::savePieceWeight(const String &nfcId, double pieceWeight) {
-  prefs_.putDouble(pieceWeightKey(nfcId).c_str(), pieceWeight);
+void BoxStorage::saveCountsPerGram(uint8_t lockerId, double countsPerGram) {
+  prefs_.putDouble(key("scale", lockerId).c_str(), countsPerGram);
 }
 
-String BoxStorage::zeroKey(uint8_t lockerId) {
-  return "zero" + String(lockerId);
-}
-
-String BoxStorage::pieceWeightKey(const String &nfcId) {
-  // FNV-1a, 32 бита
-  uint32_t hash = 2166136261u;
-  for (size_t i = 0; i < nfcId.length(); ++i) {
-    hash ^= static_cast<uint8_t>(nfcId[i]);
-    hash *= 16777619u;
-  }
-  char key[12];
-  snprintf(key, sizeof(key), "pw%08lx", static_cast<unsigned long>(hash));
-  return String(key);
+String BoxStorage::key(const char *prefix, uint8_t lockerId) {
+  return String(prefix) + String(lockerId);
 }

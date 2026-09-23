@@ -1,6 +1,6 @@
 import type { OnboardingSettings } from "../api/box-setup-types";
 import type { ApiClient } from "../api/client";
-import type { Calibration, CalibrationRequest } from "../api/types";
+import type { Calibration, CalibrationRequest, ScaleAction, ScaleResult } from "../api/types";
 import type { DashboardStore } from "./dashboard-store";
 
 /** Write side of the dashboard: every action refreshes the snapshot so the screen never lags behind. */
@@ -22,8 +22,12 @@ export class CommandService {
     await this.store.refreshNow();
   }
 
-  async tare(boxId: string, lockerId: number): Promise<void> {
-    await this.api.tare(boxId, lockerId);
+  async scale(boxId: string, lockerId: number, action: ScaleAction, grams: number | null = null): Promise<ScaleResult> {
+    try {
+      return await this.api.scale(boxId, lockerId, action, grams);
+    } finally {
+      await this.store.refreshNow();
+    }
   }
 
   async startCalibration(request: CalibrationRequest): Promise<Calibration> {

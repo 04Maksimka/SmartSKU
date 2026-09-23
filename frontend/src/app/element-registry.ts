@@ -3,10 +3,11 @@ import { BoxSetupDialog } from "../components/box-setup-dialog";
 import { CalibrationDialog } from "../components/calibration-dialog";
 import { CalibrationList } from "../components/calibration-list";
 import { ComponentTable } from "../components/component-table";
-import { EmulatorPanel } from "../components/emulator-panel";
 import { EventLog } from "../components/event-log";
 import { LockerTile } from "../components/locker-tile";
+import { ProcedureChecklist } from "../components/procedure-checklist";
 import { SkuApp } from "../components/sku-app";
+import { ScaleSetupDialog } from "../components/scale-setup-dialog";
 
 export class ElementRegistry {
   private readonly elements: [string, CustomElementConstructor][] = [
@@ -18,7 +19,8 @@ export class ElementRegistry {
     ["sku-event-log", EventLog],
     ["sku-calibration-dialog", CalibrationDialog],
     ["sku-box-setup-dialog", BoxSetupDialog],
-    ["sku-emulator-panel", EmulatorPanel],
+    ["sku-scale-setup-dialog", ScaleSetupDialog],
+    ["sku-procedure-checklist", ProcedureChecklist],
   ];
 
   register(): void {

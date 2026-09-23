@@ -67,8 +67,14 @@ ConsoleCommand ServiceConsole::parse(String line) {
     command.type = ConsoleCommand::Type::ForgetBoxId;
   } else if (name == "reset") {
     command.type = ConsoleCommand::Type::Reset;
-  } else if (name == "t") {
-    command.type = parseLocker(args, command.lockerId) ? ConsoleCommand::Type::Tare : ConsoleCommand::Type::Invalid;
+  } else if (name == "z") {
+    command.type = parseLocker(args, command.lockerId) ? ConsoleCommand::Type::Zero : ConsoleCommand::Type::Invalid;
+  } else if (name == "w") {
+    command.type = parseReference(args, command) ? ConsoleCommand::Type::Reference : ConsoleCommand::Type::Invalid;
+  } else if (name == "c") {
+    command.type = parseLocker(args, command.lockerId) ? ConsoleCommand::Type::CellTare : ConsoleCommand::Type::Invalid;
+  } else if (name == "x") {
+    command.type = parseLocker(args, command.lockerId) ? ConsoleCommand::Type::Cancel : ConsoleCommand::Type::Invalid;
   } else {
     command.type = ConsoleCommand::Type::Invalid;
   }
@@ -92,12 +98,28 @@ bool ServiceConsole::parseLocker(const String &text, uint8_t &lockerId) {
   return true;
 }
 
+bool ServiceConsole::parseReference(const String &text, ConsoleCommand &command) {
+  int space = text.indexOf(' ');
+  if (!parseLocker(space < 0 ? text : text.substring(0, space), command.lockerId)) {
+    return false;
+  }
+  command.grams = space < 0 ? AppConfig::REFERENCE_GRAMS : text.substring(space + 1).toDouble();
+  if (command.grams <= 0) {
+    Serial.println("Reference weight must be positive grams");
+    return false;
+  }
+  return true;
+}
+
 void ServiceConsole::printHelp() {
   Serial.println("Commands:");
-  Serial.println("  t [locker]          zero: insert the EMPTY cell first");
+  Serial.println("  z [locker]          zero the load cell: the cell is pulled out, nothing on the slot");
+  Serial.println("  w [locker] [grams]  scale by the reference weight on the zeroed empty slot (default 100 g)");
+  Serial.println("  c [locker]          weigh the inserted EMPTY cell and write its tare to the tag");
+  Serial.println("  x [locker]          cancel calibration");
   Serial.println("  s                   status");
   Serial.println("  v                   toggle readings every second");
   Serial.println("  forget              forget box_id and reboot");
-  Serial.println("  reset               forget box_id, zeros and piece weights (keeps network) and reboot");
+  Serial.println("  reset               forget box_id and load cell setup (keeps network and cell tags) and reboot");
   Serial.println("  setup               Bluetooth setup mode (same as holding BOOT for 3 s)");
 }

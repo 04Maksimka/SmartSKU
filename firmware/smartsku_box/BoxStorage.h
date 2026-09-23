@@ -5,9 +5,8 @@
 
 #include "NetworkSettings.h"
 
-// Энергонезависимая память бокса (NVS): настройки сети, box_id, ноль тензодатчика каждой ячейки, вес штуки для каждой
-// NFC-метки.
-// Всё это переживает перезагрузку: после включения ячейку уже нельзя тарировать — в ней может лежать крепёж
+// Энергонезависимая память бокса (NVS): настройки сети, box_id и настройка тензодатчика каждого слота — ноль и
+// масштаб. Данные ячеек (тара, вес штуки) живут в их NFC-метках
 class BoxStorage {
 public:
   void begin();
@@ -18,21 +17,18 @@ public:
   String boxId();
   void saveBoxId(const String &boxId);
   void forgetBoxId();
-  // Стереть всё, кроме настроек сети: box_id, ноли и веса штук. Бокс начнёт с чистого листа, но останется в сети
+  // Стереть всё, кроме настроек сети: box_id и сведения о слотах. Бокс начнёт с чистого листа, но останется в сети
   void resetKeepingNetwork();
 
-  // Сырые показания HX711 с вставленной пустой ячейкой; false — ноль ещё не выставлялся
-  bool loadZero(uint8_t lockerId, double &zeroOffset);
-  void saveZero(uint8_t lockerId, double zeroOffset);
-
-  // 0, если ячейка с этой меткой ещё не калибровалась в этом боксе
-  double pieceWeight(const String &nfcId);
-  void savePieceWeight(const String &nfcId, double pieceWeight);
+  // Сырое показание HX711 пустого слота; false — ноль ещё не задан
+  bool loadZero(uint8_t lockerId, double &raw);
+  void saveZero(uint8_t lockerId, double raw);
+  // Отсчётов HX711 на грамм, со знаком направления датчика; 0 — слот ещё не настроен гирей
+  double countsPerGram(uint8_t lockerId);
+  void saveCountsPerGram(uint8_t lockerId, double countsPerGram);
 
 private:
-  static String zeroKey(uint8_t lockerId);
-  // Ключ NVS не длиннее 15 символов, а UID бывает до 20 hex-символов — поэтому хэш
-  static String pieceWeightKey(const String &nfcId);
+  static String key(const char *prefix, uint8_t lockerId);
 
   Preferences prefs_;
 };
