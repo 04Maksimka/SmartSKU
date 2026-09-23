@@ -3,62 +3,105 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>SmartSKU</title>
+    <title>SCUBOX</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📦</text></svg>" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <style>
       :root {
-        color-scheme: light dark;
-        --bg: #f5f6f8;
-        --surface: #ffffff;
-        --surface-2: #fafbfc;
-        --border: #e3e6eb;
-        --chip: #eef0f3;
-        --text: #1b1f24;
-        --muted: #6b7380;
-        --accent: #3b82f6;
-        --accent-soft: rgba(59, 130, 246, 0.18);
-        --tone-neutral: #4b5563;
-        --tone-neutral-bg: #eef0f3;
-        --tone-good: #15803d;
-        --tone-good-bg: #dcfce7;
-        --tone-bad: #b91c1c;
-        --tone-bad-bg: #fee2e2;
-        --tone-warn: #a16207;
-        --tone-warn-bg: #fef3c7;
-        --tone-info: #1d4ed8;
-        --tone-info-bg: #dbeafe;
+        color-scheme: light;
+        --bg: #E9EAEC;
+        --surface: #FFFFFF;
+        --surface-2: #F5F6F8;
+        --border: #DEE1E7;
+        --border-2: #E9EBEF;
+        --chip: #EEF0F3;
+        --text: #181B21;
+        --muted: #626976;
+
+        --accent: #E09A34;
+        --accent-ink: #20242D;
+        --accent-soft: rgba(224, 154, 52, 0.18);
+
+        --graphite: #14171C;
+        --graphite-2: #1F232B;
+        --graphite-3: #2B303A;
+
+        --blue: #2E4A78;
+        --blue-soft: #E7ECF4;
+
+        --panel: #0C0D10;
+        --panel-2: #131519;
+        --led: #FF3B30;
+
+        --tone-neutral: #4B5563;
+        --tone-neutral-bg: #EEF0F3;
+        --tone-good: #1F7A52;
+        --tone-good-bg: #E1F0E9;
+        --tone-bad: #B32C1C;
+        --tone-bad-bg: #FBE7E3;
+        --tone-warn: #A9741F;
+        --tone-warn-bg: #FAF0DC;
+        --tone-info: #2E4A78;
+        --tone-info-bg: #E7ECF4;
+
+        --grid: rgba(20, 23, 28, 0.05);
+        --r: 14px;
+        --r-sm: 9px;
+        --r-xs: 6px;
+
+        --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
       }
 
       @media (prefers-color-scheme: dark) {
         :root {
-          --bg: #0f1216;
-          --surface: #171b21;
-          --surface-2: #1c2129;
-          --border: #2a303a;
-          --chip: #242a33;
-          --text: #e6e9ee;
-          --muted: #8b94a3;
-          --accent: #60a5fa;
-          --accent-soft: rgba(96, 165, 250, 0.2);
-          --tone-neutral: #c3c9d3;
-          --tone-neutral-bg: #262c36;
-          --tone-good: #4ade80;
-          --tone-good-bg: rgba(74, 222, 128, 0.12);
-          --tone-bad: #f87171;
-          --tone-bad-bg: rgba(248, 113, 113, 0.13);
-          --tone-warn: #fbbf24;
-          --tone-warn-bg: rgba(251, 191, 36, 0.12);
-          --tone-info: #93c5fd;
-          --tone-info-bg: rgba(96, 165, 250, 0.14);
+          color-scheme: dark;
+          --bg: #0C0D10;
+          --surface: #14171C;
+          --surface-2: #1A1E25;
+          --border: #2B303A;
+          --border-2: #232830;
+          --chip: #232830;
+          --text: #E2E5EB;
+          --muted: #8A8F99;
+
+          --accent: #E09A34;
+          --accent-ink: #20242D;
+          --accent-soft: rgba(224, 154, 52, 0.16);
+
+          --blue-soft: rgba(46, 74, 120, 0.22);
+
+          --panel: #08090B;
+          --panel-2: #0C0D10;
+
+          --tone-neutral: #C3C9D3;
+          --tone-neutral-bg: #232830;
+          --tone-good: #4CD9A0;
+          --tone-good-bg: rgba(47, 158, 110, 0.14);
+          --tone-bad: #F87171;
+          --tone-bad-bg: rgba(211, 64, 46, 0.14);
+          --tone-warn: #F5B95E;
+          --tone-warn-bg: rgba(224, 154, 52, 0.14);
+          --tone-info: #93AADB;
+          --tone-info-bg: rgba(46, 74, 120, 0.18);
+
+          --grid: rgba(255, 255, 255, 0.03);
         }
       }
 
       body {
         margin: 0;
         padding: 0 20px;
-        background: var(--bg);
+        background-color: var(--bg);
+        background-image:
+          linear-gradient(var(--grid) 1px, transparent 1px),
+          linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+        background-size: 26px 26px;
         color: var(--text);
-        font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        font: 14px/1.45 var(--sans);
+        -webkit-font-smoothing: antialiased;
       }
     </style>
   </head>

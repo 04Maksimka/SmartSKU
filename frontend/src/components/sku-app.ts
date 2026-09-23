@@ -26,22 +26,61 @@ export class SkuApp extends LitElement {
       :host {
         max-width: 1400px;
         margin: 0 auto;
-        padding-block: 20px 48px;
+        padding-block: 0 48px;
       }
 
-      header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        gap: 12px;
-        flex-wrap: wrap;
+      .topbar {
+        position: sticky;
+        top: 0;
+        z-index: 50;
+        background: rgba(233, 234, 236, 0.86);
+        backdrop-filter: blur(10px);
+        border-bottom: 1px solid var(--border);
+        margin-inline: -20px;
+        padding-inline: 20px;
         margin-bottom: 20px;
       }
 
-      h1 {
-        margin: 0;
-        font-size: 24px;
-        letter-spacing: -0.01em;
+      @media (prefers-color-scheme: dark) {
+        .topbar {
+          background: rgba(12, 13, 16, 0.86);
+        }
+      }
+
+      .topbar-inner {
+        display: flex;
+        align-items: center;
+        gap: 18px;
+        height: 54px;
+        max-width: 1400px;
+        margin: 0 auto;
+      }
+
+      .brandmark {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        font-family: var(--mono);
+        font-weight: 600;
+        font-size: 15px;
+        letter-spacing: 0.22em;
+        color: var(--text);
+        text-decoration: none;
+        flex: none;
+      }
+
+      .brandmark img {
+        height: 22px;
+        width: auto;
+        display: block;
+      }
+
+      .toolbar {
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
       }
 
       .status {
@@ -51,17 +90,10 @@ export class SkuApp extends LitElement {
         font-size: 13px;
       }
 
-      .toolbar {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        flex-wrap: wrap;
-      }
-
       .error {
         margin-bottom: 16px;
         padding: 12px 14px;
-        border-radius: 10px;
+        border-radius: var(--r-sm, 9px);
         background: var(--tone-bad-bg);
         color: var(--tone-bad);
       }
@@ -89,8 +121,12 @@ export class SkuApp extends LitElement {
         gap: 32px 16px;
       }
 
-      code {
-        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      code, .mono {
+        font-family: var(--mono);
+      }
+
+      .section-title h2 {
+        letter-spacing: -0.01em;
       }
     `,
   ];
@@ -188,17 +224,22 @@ export class SkuApp extends LitElement {
 
   protected override render() {
     return html`
-      <header>
-        <h1>SmartSKU</h1>
-        <div class="toolbar">
-          <button @click=${this.openSetup}>Подключить бокс</button>
-          <button title="Ноль и гиря для тензодатчиков, вес пустых ячеек" @click=${() => this.openScaleSetup(null)}>
-            Настройка весов
-          </button>
-          <button class="primary" @click=${() => void this.openDialog(null)}>Калибровка</button>
-          ${this.renderStatus()}
+      <div class="topbar">
+        <div class="topbar-inner">
+          <span class="brandmark">
+            <img src="/logo_mark.png" alt="S" />
+            SCUBOX
+          </span>
+          <div class="toolbar">
+            <button @click=${this.openSetup}>Подключить бокс</button>
+            <button title="Ноль и гиря для тензодатчиков, вес пустых ячеек" @click=${() => this.openScaleSetup(null)}>
+              Настройка весов
+            </button>
+            <button class="primary" @click=${() => void this.openDialog(null)}>Калибровка</button>
+            ${this.renderStatus()}
+          </div>
         </div>
-      </header>
+      </div>
 
       ${this.renderDashboard()}
     `;

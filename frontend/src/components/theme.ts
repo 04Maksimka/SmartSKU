@@ -16,7 +16,8 @@ export class Theme {
     .card {
       background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: 12px;
+      border-radius: var(--r, 14px);
+      box-shadow: 0 1px 2px rgba(20, 23, 28, 0.04);
     }
 
     .muted {
@@ -24,7 +25,7 @@ export class Theme {
     }
 
     .mono {
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-family: var(--mono);
       font-size: 0.92em;
     }
 
@@ -32,11 +33,14 @@ export class Theme {
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      padding: 2px 10px;
+      padding: 2px 9px;
       border-radius: 999px;
-      font-size: 12px;
+      font-family: var(--mono);
+      font-size: 11px;
       font-weight: 600;
+      letter-spacing: 0.04em;
       white-space: nowrap;
+      text-transform: uppercase;
       background: var(--tone-neutral-bg);
       color: var(--tone-neutral);
     }
@@ -64,8 +68,10 @@ export class Theme {
     .tag {
       display: inline-block;
       padding: 1px 8px;
-      border-radius: 6px;
-      font-size: 12px;
+      border-radius: var(--r-xs, 6px);
+      font-family: var(--mono);
+      font-size: 11.5px;
+      letter-spacing: 0.02em;
       background: var(--chip);
       color: var(--muted);
     }
@@ -82,6 +88,7 @@ export class Theme {
     .section-title h2 {
       margin: 0;
       font-size: 18px;
+      letter-spacing: -0.01em;
     }
 
     .table-wrap {
@@ -96,10 +103,11 @@ export class Theme {
 
     th {
       text-align: left;
-      font-size: 12px;
+      font-family: var(--mono);
+      font-size: 11px;
       font-weight: 600;
       text-transform: uppercase;
-      letter-spacing: 0.04em;
+      letter-spacing: 0.06em;
       color: var(--muted);
       padding: 10px 12px;
       border-bottom: 1px solid var(--border);
@@ -108,7 +116,7 @@ export class Theme {
 
     td {
       padding: 9px 12px;
-      border-bottom: 1px solid var(--border);
+      border-bottom: 1px solid var(--border-2, var(--border));
       vertical-align: middle;
     }
 
@@ -139,7 +147,7 @@ export class Theme {
 
     input,
     select {
-      font: inherit;
+      font-family: var(--sans);
       font-size: 14px;
       color: var(--text);
       background: var(--surface);
@@ -149,16 +157,24 @@ export class Theme {
       min-width: 0;
     }
 
+    input:focus,
+    select:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px var(--accent-soft);
+    }
+
     button {
-      font: inherit;
+      font-family: var(--sans);
       font-size: 13px;
       font-weight: 600;
       color: var(--text);
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: 8px;
-      padding: 6px 12px;
+      padding: 7px 13px;
       cursor: pointer;
+      transition: border-color 0.15s, color 0.15s;
     }
 
     button:hover:not(:disabled) {
@@ -174,12 +190,12 @@ export class Theme {
     button.primary {
       background: var(--accent);
       border-color: var(--accent);
-      color: #fff;
+      color: var(--accent-ink, #20242D);
     }
 
     button.primary:hover:not(:disabled) {
       filter: brightness(1.08);
-      color: #fff;
+      color: var(--accent-ink, #20242D);
     }
 
     button.danger:hover:not(:disabled) {

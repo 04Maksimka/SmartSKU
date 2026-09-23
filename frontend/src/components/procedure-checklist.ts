@@ -55,8 +55,8 @@ export class ProcedureChecklist extends LitElement {
 
       .display {
         padding: 2px 8px;
-        border-radius: 6px;
-        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        border-radius: var(--r-xs, 6px);
+        font-family: var(--mono);
         font-size: 12px;
         letter-spacing: 0.08em;
         background: var(--chip);

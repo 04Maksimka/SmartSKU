@@ -45,13 +45,13 @@ export class BoxSetupDialog extends LitElement {
         width: min(760px, calc(100vw - 32px));
         padding: 0;
         border: 1px solid var(--border);
-        border-radius: 14px;
+        border-radius: var(--r, 14px);
         background: var(--surface);
         color: var(--text);
       }
 
       dialog::backdrop {
-        background: rgba(15, 18, 22, 0.45);
+        background: rgba(12, 13, 16, 0.5);
       }
 
       .body {

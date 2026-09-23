@@ -17,32 +17,39 @@ export class LockerTile extends LitElement {
         height: 100%;
         display: flex;
         flex-direction: column;
-        gap: 10px;
-        padding: 14px;
-        border-radius: 10px;
+        overflow: hidden;
+        border-radius: 12px;
         border: 1px solid var(--border);
-        background: var(--surface-2);
+        background: var(--surface);
+        box-shadow: 0 1px 2px rgba(20, 23, 28, 0.04);
       }
 
       .tile.out {
         border-style: dashed;
         background: transparent;
+        box-shadow: none;
       }
 
+      /* ── top bar: SKU name + status dot ── */
       .head {
         display: flex;
         align-items: center;
         justify-content: space-between;
         gap: 8px;
+        padding: 9px 12px;
+        border-bottom: 1px solid var(--border-2, var(--border));
       }
 
       .slot {
-        font-weight: 700;
+        font-family: var(--mono);
+        font-weight: 600;
+        font-size: 13.5px;
+        letter-spacing: 0.02em;
         white-space: nowrap;
       }
 
       .name {
-        font-size: 16px;
+        font-size: 15px;
         font-weight: 650;
         line-height: 1.25;
       }
@@ -53,16 +60,80 @@ export class LockerTile extends LitElement {
         gap: 4px;
       }
 
-      .quantity {
+      /* ── dark display panel — echo of physical LED ── */
+      .display-panel {
+        background: var(--panel, #0C0D10);
         display: flex;
-        align-items: baseline;
-        gap: 6px;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        padding: 18px 12px;
+        position: relative;
       }
 
-      .quantity strong {
-        font-size: 34px;
+      .display-panel .qty {
+        font-family: var(--mono);
+        font-size: 42px;
+        font-weight: 700;
         line-height: 1;
-        font-weight: 750;
+        color: var(--led, #FF3B30);
+        letter-spacing: 0.04em;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .display-panel .unit {
+        font-family: var(--mono);
+        font-size: 12px;
+        color: #8A8F99;
+        align-self: flex-end;
+        margin-bottom: 6px;
+      }
+
+      .display-panel .word {
+        font-family: var(--mono);
+        font-weight: 600;
+        letter-spacing: 0.14em;
+        font-size: 19px;
+      }
+
+      .display-panel .word.amber {
+        color: var(--accent);
+      }
+
+      .display-panel .word.red {
+        color: var(--led);
+      }
+
+      .display-panel .word.muted {
+        color: #5A6270;
+      }
+
+      /* ── bottom bar: address + piece weight ── */
+      .info-bar {
+        padding: 9px 12px;
+        border-top: 1px solid var(--border-2, var(--border));
+      }
+
+      .info-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+
+      .addr, .w1 {
+        font-family: var(--mono);
+        font-size: 11.5px;
+        color: var(--muted);
+        letter-spacing: 0.02em;
+      }
+
+      /* ── details section ── */
+      .details {
+        padding: 10px 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
       }
 
       dl {
@@ -75,6 +146,11 @@ export class LockerTile extends LitElement {
 
       dt {
         color: var(--muted);
+        font-family: var(--mono);
+        font-size: 11.5px;
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+        padding-top: 2px;
       }
 
       dd {
@@ -84,7 +160,7 @@ export class LockerTile extends LitElement {
 
       .note {
         padding: 8px 10px;
-        border-radius: 8px;
+        border-radius: var(--r-xs, 6px);
         font-size: 13px;
       }
 
@@ -119,7 +195,7 @@ export class LockerTile extends LitElement {
         flex-direction: column;
         gap: 2px;
         padding: 8px 10px;
-        border-radius: 8px;
+        border-radius: var(--r-xs, 6px);
         border-left: 3px solid var(--accent);
         background: var(--accent-soft);
         font-size: 13px;
@@ -142,8 +218,24 @@ export class LockerTile extends LitElement {
         justify-content: space-between;
         gap: 8px;
         flex-wrap: wrap;
+        padding: 8px 12px;
+        border-top: 1px solid var(--border-2, var(--border));
         font-size: 12px;
       }
+
+      /* ── status dot ── */
+      .dot {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        flex: none;
+        box-shadow: 0 0 0 3px var(--surface);
+      }
+
+      .dot.green { background: #2F9E6E; }
+      .dot.amber { background: var(--accent); }
+      .dot.red { background: #D2402E; }
+      .dot.neutral { background: var(--muted); }
     `,
   ];
 
@@ -155,14 +247,18 @@ export class LockerTile extends LitElement {
 
   protected override render() {
     const { locker } = this.overview;
+    const component = locker.component;
     return html`
       <div class="tile ${locker.nfc_flag ? "" : "out"}">
         <div class="head">
-          <span class="slot">Слот ${this.format.slot(locker.locker_id)}</span>
-          ${this.renderPresence()}
+          <span class="slot">${component ? component.name : `Слот ${this.format.slot(locker.locker_id)}`}</span>
+          ${this.renderPresenceDot()}
         </div>
-        ${locker.calibration ? this.renderCalibration() : this.renderSetupNote()}
-        ${locker.nfc_flag ? this.renderInserted() : this.renderPulledOut()}
+        ${this.renderDisplay()}
+        <div class="details">
+          ${locker.calibration ? this.renderCalibration() : this.renderSetupNote()}
+          ${locker.nfc_flag ? this.renderInserted() : this.renderPulledOut()}
+        </div>
         <div class="footer">
           <span class="muted">обновлено ${this.format.time(locker.updated_at)}</span>
           <span class="actions">${this.renderActions()}</span>
@@ -253,11 +349,30 @@ export class LockerTile extends LitElement {
     </button>`;
   }
 
-  /** Presence comes from the NFC tag alone: it does not need the load cell setup or a calibration. */
-  private renderPresence() {
+  /** Dark panel echoing the physical LED display. */
+  private renderDisplay() {
+    const { locker } = this.overview;
+    if (!locker.nfc_flag) {
+      return html`<div class="display-panel"><span class="word muted">—</span></div>`;
+    }
+    const component = locker.component;
+    if (component === null) {
+      return html`<div class="display-panel"><span class="word amber">CAL</span></div>`;
+    }
+    if (locker.quantity === null) {
+      return html`<div class="display-panel"><span class="word amber">—</span><span class="unit">шт</span></div>`;
+    }
+    return html`<div class="display-panel">
+      <span class="qty">${locker.quantity}</span>
+      <span class="unit">шт</span>
+    </div>`;
+  }
+
+  /** Status dot: green = present, amber = pulled out. */
+  private renderPresenceDot() {
     return this.overview.locker.nfc_flag
-      ? html`<span class="pill good">● на месте</span>`
-      : html`<span class="pill warn">○ извлечена</span>`;
+      ? html`<span class="dot green" title="на месте"></span>`
+      : html`<span class="dot amber" title="извлечена"></span>`;
   }
 
   protected override updated(): void {
@@ -289,26 +404,27 @@ export class LockerTile extends LitElement {
     const weight = locker.cell_tared && locker.slot_ready ? this.format.weight(locker.weight) : "—";
     if (component === null) {
       return html`
-        <div class="name muted">Не откалибрована</div>
+        <div class="info-row">
+          <span class="addr">Слот ${this.format.slot(locker.locker_id)}</span>
+          <span class="w1">${weight}</span>
+        </div>
         <dl>
-          <dt>Содержимое</dt>
-          <dd>${weight}</dd>
           <dt>Ячейка</dt>
           <dd class="mono">${locker.nfc_id}</dd>
         </dl>
       `;
     }
     return html`
-      <div class="name">${component.name}</div>
       ${component.tags.length
         ? html`<div class="tags">${component.tags.map((tag) => html`<span class="tag">${tag}</span>`)}</div>`
         : nothing}
-      <div class="quantity"><strong>${locker.quantity ?? "—"}</strong><span class="muted">шт</span></div>
+      <div class="info-row">
+        <span class="addr">Слот ${this.format.slot(locker.locker_id)}</span>
+        <span class="w1">w₁ ${this.format.pieceWeight(component.piece_weight)}</span>
+      </div>
       <dl>
-        <dt>Содержимое</dt>
+        <dt>Вес</dt>
         <dd>${weight}</dd>
-        <dt>1 штука</dt>
-        <dd>${this.format.pieceWeight(component.piece_weight)}</dd>
         <dt>Ячейка</dt>
         <dd class="mono">${locker.nfc_id}</dd>
       </dl>

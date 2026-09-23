@@ -26,6 +26,14 @@ export class BoxCard extends LitElement {
       h3 {
         margin: 0;
         font-size: 17px;
+        letter-spacing: -0.01em;
+      }
+
+      .hw-id {
+        font-family: var(--mono);
+        font-size: 12px;
+        color: var(--muted);
+        letter-spacing: 0.02em;
       }
 
       .actions {
@@ -58,7 +66,7 @@ export class BoxCard extends LitElement {
         <header>
           <div>
             <h3>${box.hardware_id}</h3>
-            <div class="muted mono">box_id ${box.id}</div>
+            <div class="hw-id">box_id ${box.id}</div>
           </div>
           <div class="actions">
             ${unready
