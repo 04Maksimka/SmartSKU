@@ -7,8 +7,9 @@ from smartsku_backend.config import TelemetryConfig
 from smartsku_backend.db.models import Box, Component, InventoryEvent, InventoryEventType, LockerState
 from smartsku_backend.messaging.contracts import BoxDataMessage, IndicatorsCommand, LockerReading
 from smartsku_backend.messaging.publisher import CommandPublisher
+from smartsku_backend.services.clock import MonotonicClock
 from smartsku_backend.services.indicators import IndicatorPolicy
-from smartsku_backend.services.runtime_cache import LockerRuntimeCache
+from smartsku_backend.services.runtime_cache import LockerRuntimeCache, SlotObservation
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +17,10 @@ logger = logging.getLogger(__name__)
 class TelemetryService:
     """Turns periodic box readings into locker state, inventory events and indicator commands.
 
-    Results of load cell setup and calibrations come as separate box events, see BoxEventService.
+    The live state (dashboard, displays) follows every reading. The inventory journal records only what held for
+    telemetry.confirm_seconds: a half-pulled cell whose tag flickers or a weight still settling after the cell went
+    in does not produce records. Results of load cell setup and calibrations come as separate box events, see
+    BoxEventService.
     """
 
     def __init__(
@@ -25,121 +29,125 @@ class TelemetryService:
         cache: LockerRuntimeCache,
         indicator_policy: IndicatorPolicy,
         publisher: CommandPublisher,
+        *,
         config: TelemetryConfig,
+        clock: MonotonicClock,
     ) -> None:
         self._session = session
         self._cache = cache
         self._indicator_policy = indicator_policy
         self._publisher = publisher
         self._config = config
+        self._clock = clock
 
     async def handle(self, message: BoxDataMessage) -> None:
+        box_id = message.box_id
+        now = self._clock.now()
         readings = [
             reading
             for reading in message.lockers
-            if self._cache.is_significant(message.box_id, reading, self._config.weight_change_threshold)
+            if self._cache.is_significant(box_id, reading, self._config.weight_change_threshold)
         ]
-        if not readings:
+        confirmable = any(
+            self._cache.has_confirmed(box_id, reading.locker_id, now, self._config.confirm_seconds)
+            for reading in message.lockers
+        )
+        if not readings and not confirmable:
             return
-        if await self._session.get(Box, message.box_id) is None:
-            logger.warning("Telemetry from unknown box %s ignored", message.box_id)
+        if await self._session.get(Box, box_id) is None:
+            logger.warning("Telemetry from unknown box %s ignored", box_id)
             return
 
-        commands = [await self._apply(message.box_id, reading) for reading in readings]
+        commands = [await self._apply(box_id, reading, now) for reading in readings]
+        for reading in message.lockers:
+            confirmed = self._cache.take_confirmed(box_id, reading.locker_id, now, self._config.confirm_seconds)
+            if confirmed is not None:
+                await self._record(box_id, reading.locker_id, confirmed)
         await self._session.commit()
 
         for reading in readings:
-            self._cache.remember_reading(message.box_id, reading)
+            self._cache.remember_reading(box_id, reading)
         for command in commands:
             if self._cache.indicators_changed(command) and await self._publisher.send_indicators(command):
                 self._cache.remember_indicators(command)
 
-    async def _apply(self, box_id: str, reading: LockerReading) -> IndicatorsCommand:
+    async def _apply(self, box_id: str, reading: LockerReading, now: float) -> IndicatorsCommand:
         state = await self._session.get(LockerState, (box_id, reading.locker_id))
         if state is None:
             state = LockerState(box_id=box_id, locker_id=reading.locker_id, nfc_flag=False, weight=0.0)
             self._session.add(state)
-        # Cell presence comes from NFC and does not depend on the slot setup, the tare or the calibration.
-        inserted = reading.nfc_flag and (not state.nfc_flag or state.nfc_id != reading.nfc_id)
-        removed = state.nfc_flag and (not reading.nfc_flag or state.nfc_id != reading.nfc_id)
         self._store_status(state, reading)
-        if not reading.measurable:
-            return await self._apply_unmeasurable(state, reading, inserted=inserted, removed=removed)
+        # Cell presence comes from NFC and does not depend on the slot setup, the tare or the calibration.
+        nfc_id = reading.nfc_id if reading.nfc_flag else None
+        component = await self._find_component(nfc_id)
+        measurable = reading.measurable and component is not None
+        quantity = component.quantity_for(reading.weight) if measurable and component else None
 
-        if removed:
-            removed_component = await self._find_component(state.nfc_id)
+        state.nfc_flag = reading.nfc_flag
+        state.nfc_id = nfc_id
+        state.weight = reading.weight if reading.measurable else 0.0
+        state.quantity = quantity
+        state.updated_at = datetime.now(UTC)
+        self._observe(state, SlotObservation(nfc_id, quantity, state.weight), now)
+        return self._indicator_policy.build(box_id, reading.locker_id, reading.nfc_flag, quantity)
+
+    def _observe(self, state: LockerState, observation: SlotObservation, now: float) -> None:
+        """Start waiting for a reading the journal does not have yet; a return to the journal's view drops it."""
+        # No quantity (not counted yet, a calibration moves the cell) says nothing about the contents
+        quantity_news = observation.quantity is not None and observation.quantity != state.logged_quantity
+        if observation.nfc_id != state.logged_nfc_id or quantity_news:
+            self._cache.hold(state.box_id, state.locker_id, observation, now)
+        else:
+            self._cache.drop_pending(state.box_id, state.locker_id)
+
+    async def _record(self, box_id: str, locker_id: int, observation: SlotObservation) -> None:
+        state = await self._session.get(LockerState, (box_id, locker_id))
+        if state is None:
+            return
+        if state.logged_nfc_id is not None and observation.nfc_id != state.logged_nfc_id:
             self._log(
                 InventoryEventType.CELL_REMOVED,
                 state,
-                removed_component,
-                state.weight,
-                before=state.quantity,
+                state.logged_nfc_id,
+                await self._find_component(state.logged_nfc_id),
+                0.0,
+                before=state.logged_quantity,
                 after=None,
             )
+            state.logged_nfc_id = None
+            state.logged_quantity = None
+        if observation.nfc_id is None:
+            return
 
-        component = await self._find_component(reading.nfc_id)
-        previous_quantity = component.quantity if component else None
-        quantity = component.quantity_for(reading.weight) if component else None
-
-        if inserted:
-            state.nfc_id = reading.nfc_id
+        component = await self._find_component(observation.nfc_id)
+        if state.logged_nfc_id is None:
+            # "Took the cell away with 20 pieces, brought it back with 3" is one record: before is what it left with
             self._log(
                 InventoryEventType.CELL_INSERTED,
                 state,
+                observation.nfc_id,
                 component,
-                reading.weight,
-                before=previous_quantity,
-                after=quantity,
+                observation.weight,
+                before=component.quantity if component and observation.quantity is not None else None,
+                after=observation.quantity,
             )
-        # A cell that just became measurable (tared, slot set up) has no quantity yet: logged as a change from "—".
-        elif component is not None and quantity != state.quantity:
+            state.logged_nfc_id = observation.nfc_id
+        elif observation.quantity is not None and observation.quantity != state.logged_quantity:
+            # A cell that just became measurable (tared, slot set up) has no quantity yet: logged as a change from "—"
             self._log(
                 InventoryEventType.QUANTITY_CHANGED,
                 state,
+                observation.nfc_id,
                 component,
-                reading.weight,
-                before=state.quantity,
-                after=quantity,
+                observation.weight,
+                before=state.logged_quantity,
+                after=observation.quantity,
             )
-
-        if component is not None:
-            component.quantity = quantity
-        state.nfc_flag = reading.nfc_flag
-        state.nfc_id = reading.nfc_id
-        state.weight = reading.weight
-        state.quantity = quantity
-        state.updated_at = datetime.now(UTC)
-        return self._indicator_policy.build(box_id, reading.locker_id, reading.nfc_flag, quantity)
-
-    async def _apply_unmeasurable(
-        self, state: LockerState, reading: LockerReading, *, inserted: bool, removed: bool
-    ) -> IndicatorsCommand:
-        """The weight means nothing yet (or a calibration moves the cell): log only cell presence."""
-        if removed:
-            self._log(
-                InventoryEventType.CELL_REMOVED,
-                state,
-                await self._find_component(state.nfc_id),
-                0.0,
-                before=state.quantity,
-                after=None,
-            )
-        if inserted:
-            state.nfc_id = reading.nfc_id
-            self._log(
-                InventoryEventType.CELL_INSERTED,
-                state,
-                await self._find_component(reading.nfc_id),
-                0.0,
-                before=None,
-                after=None,
-            )
-        state.nfc_flag = reading.nfc_flag
-        state.nfc_id = reading.nfc_id if reading.nfc_flag else None
-        state.weight = 0.0
-        state.quantity = None
-        state.updated_at = datetime.now(UTC)
-        return self._indicator_policy.build(state.box_id, state.locker_id, reading.nfc_flag, None)
+        else:
+            return
+        state.logged_quantity = observation.quantity
+        if component is not None and observation.quantity is not None:
+            component.quantity = observation.quantity
 
     def _store_status(self, state: LockerState, reading: LockerReading) -> None:
         state.slot_ready = reading.slot_ready
@@ -156,6 +164,7 @@ class TelemetryService:
         self,
         event_type: InventoryEventType,
         state: LockerState,
+        nfc_id: str,
         component: Component | None,
         weight: float,
         *,
@@ -167,7 +176,7 @@ class TelemetryService:
                 event_type=event_type,
                 box_id=state.box_id,
                 locker_id=state.locker_id,
-                nfc_id=state.nfc_id,
+                nfc_id=nfc_id,
                 component_name=component.name if component else None,
                 weight=weight,
                 quantity_before=before,

@@ -74,6 +74,10 @@ class LockerState(Base):
     # Calibration the box is walking through: the step it waits for and the portion size
     calibration_step: Mapped[str | None] = mapped_column(String(32))
     calibration_pieces: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    # What the inventory journal last recorded for this slot: the cell in it and its quantity. Readings reach the
+    # journal only after they hold for telemetry.confirm_seconds, so these lag behind the live fields above.
+    logged_nfc_id: Mapped[str | None] = mapped_column(String(64))
+    logged_quantity: Mapped[int | None] = mapped_column(Integer)
     updated_at: Mapped[datetime] = mapped_column(UtcDateTime, default=lambda: datetime.now(UTC))
 
 

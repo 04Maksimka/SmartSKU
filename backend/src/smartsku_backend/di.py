@@ -10,6 +10,7 @@ from smartsku_backend.messaging.topics import MqttTopics
 from smartsku_backend.services.box_events import BoxEventService
 from smartsku_backend.services.box_status import BoxStatusService
 from smartsku_backend.services.calibration import CalibrationService
+from smartsku_backend.services.clock import MonotonicClock
 from smartsku_backend.services.failure_notes import FailureNotes
 from smartsku_backend.services.indicators import IndicatorPolicy
 from smartsku_backend.services.inventory import ComponentService, InventoryQueryService
@@ -58,6 +59,7 @@ class InfrastructureProvider(Provider):
 
 class ServicesProvider(Provider):
     cache = provide(LockerRuntimeCache, scope=Scope.APP)
+    clock = provide(MonotonicClock, scope=Scope.APP)
     indicator_policy = provide(IndicatorPolicy, scope=Scope.APP)
     scale_waiter = provide(ScaleResultWaiter, scope=Scope.APP)
     failure_notes = provide(FailureNotes, scope=Scope.APP)

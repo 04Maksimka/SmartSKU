@@ -1,4 +1,24 @@
+from dataclasses import dataclass
+
 from smartsku_backend.messaging.contracts import IndicatorsCommand, LockerReading
+
+
+@dataclass(frozen=True)
+class SlotObservation:
+    """What the journal would record for a slot: the cell in it (None — empty) and its quantity (None — not counted)."""
+
+    nfc_id: str | None
+    quantity: int | None
+    weight: float
+
+    def same_as(self, other: "SlotObservation") -> bool:
+        return self.nfc_id == other.nfc_id and self.quantity == other.quantity
+
+
+@dataclass(frozen=True)
+class PendingObservation:
+    observation: SlotObservation
+    since: float
 
 
 class LockerRuntimeCache:
@@ -11,6 +31,7 @@ class LockerRuntimeCache:
     def __init__(self) -> None:
         self._readings: dict[tuple[str, int], LockerReading] = {}
         self._indicators: dict[tuple[str, int], IndicatorsCommand] = {}
+        self._pending: dict[tuple[str, int], PendingObservation] = {}
 
     def is_significant(self, box_id: str, reading: LockerReading, weight_threshold: float) -> bool:
         previous = self._readings.get((box_id, reading.locker_id))
@@ -36,7 +57,32 @@ class LockerRuntimeCache:
     def remember_indicators(self, command: IndicatorsCommand) -> None:
         self._indicators[(command.box_id, command.locker_id)] = command
 
+    def hold(self, box_id: str, locker_id: int, observation: SlotObservation, now: float) -> None:
+        """Wait for the observation to hold; the same one again keeps its start time, a new one starts over."""
+        key = (box_id, locker_id)
+        pending = self._pending.get(key)
+        if pending is None or not pending.observation.same_as(observation):
+            self._pending[key] = PendingObservation(observation, now)
+        else:
+            self._pending[key] = PendingObservation(observation, pending.since)
+
+    def drop_pending(self, box_id: str, locker_id: int) -> None:
+        self._pending.pop((box_id, locker_id), None)
+
+    def take_confirmed(self, box_id: str, locker_id: int, now: float, hold_seconds: float) -> SlotObservation | None:
+        """The observation that has held long enough, removed from waiting; None if there is none yet."""
+        key = (box_id, locker_id)
+        pending = self._pending.get(key)
+        if pending is None or now - pending.since < hold_seconds:
+            return None
+        del self._pending[key]
+        return pending.observation
+
+    def has_confirmed(self, box_id: str, locker_id: int, now: float, hold_seconds: float) -> bool:
+        pending = self._pending.get((box_id, locker_id))
+        return pending is not None and now - pending.since >= hold_seconds
+
     def forget_box(self, box_id: str) -> None:
-        for storage in (self._readings, self._indicators):
+        for storage in (self._readings, self._indicators, self._pending):
             for key in [key for key in storage if key[0] == box_id]:
                 del storage[key]

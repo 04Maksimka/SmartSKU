@@ -116,6 +116,7 @@ class BoxEventService:
         if state is not None:
             # Already logged as the calibration result, the next telemetry must not log it again as a change
             state.quantity = component.quantity
+            state.logged_quantity = component.quantity
         self._log(
             InventoryEventType.CALIBRATED,
             event.box_id,

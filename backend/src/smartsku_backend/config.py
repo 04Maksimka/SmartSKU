@@ -31,6 +31,8 @@ class MqttConfig(BaseModel):
 
 class TelemetryConfig(BaseModel):
     weight_change_threshold: float
+    # A removal, an insertion or a new quantity reaches the inventory journal only after it holds this long
+    confirm_seconds: float = 3
 
 
 class ScaleConfig(BaseModel):

@@ -19,6 +19,9 @@ mqtt:
 telemetry:
   # Grams. Boxes filter their own noise (report steps of 0.5 g or half a piece), so this only drops float jitter
   weight_change_threshold: 0.05
+  # Seconds a removal, an insertion or a new quantity must hold before it is written to the inventory journal:
+  # a half-pulled cell whose tag flickers, or a settling weight, does not produce records
+  confirm_seconds: 3
 
 scale:
   # Load cell setup from the dashboard: how long a request waits for the box to measure
