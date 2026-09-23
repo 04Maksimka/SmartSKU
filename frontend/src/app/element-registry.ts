@@ -8,6 +8,7 @@ import { LockerTile } from "../components/locker-tile";
 import { ProcedureChecklist } from "../components/procedure-checklist";
 import { SkuApp } from "../components/sku-app";
 import { ScaleSetupDialog } from "../components/scale-setup-dialog";
+import { SegmentDisplay } from "../components/segment-display";
 
 export class ElementRegistry {
   private readonly elements: [string, CustomElementConstructor][] = [
@@ -21,6 +22,7 @@ export class ElementRegistry {
     ["sku-box-setup-dialog", BoxSetupDialog],
     ["sku-scale-setup-dialog", ScaleSetupDialog],
     ["sku-procedure-checklist", ProcedureChecklist],
+    ["sku-segment-display", SegmentDisplay],
   ];
 
   register(): void {

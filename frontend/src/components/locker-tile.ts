@@ -3,12 +3,21 @@ import { LitElement, css, html, nothing } from "lit";
 import { DashboardEvents } from "../app/dashboard-events";
 import type { LockerOverview } from "../app/dashboard-store";
 import { Formatter } from "../app/formatter";
+import type { CalibrationStep } from "../api/types";
 import { CalibrationPlan } from "../app/calibration-plan";
+import { SegmentDisplay } from "./segment-display";
 import { Theme } from "./theme";
 
 /** One locker of a box: which cell is inside, what it holds and how many pieces are left. */
 export class LockerTile extends LitElement {
   static override properties = { overview: { attribute: false } };
+
+  // Display prompts of a calibration step, as the box shows them
+  private static readonly STEP_PROMPTS: Record<CalibrationStep, string> = {
+    remove_cell: "OUt ",
+    insert_filled: " In ",
+    measure_pieces: "HOLd",
+  };
 
   static override styles = [
     Theme.shared,
@@ -69,49 +78,21 @@ export class LockerTile extends LitElement {
         background: var(--panel, #0c0d10);
         box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04), inset 0 8px 24px rgba(0, 0, 0, 0.45);
         display: flex;
-        align-items: baseline;
+        align-items: flex-end;
         justify-content: center;
         gap: 8px;
         padding: 16px 10px 14px;
-        min-height: 78px;
       }
 
-      .display-panel .qty {
-        font-family: var(--mono);
-        font-size: 42px;
-        font-weight: 700;
-        line-height: 1;
-        color: var(--led, #ff3b30);
-        letter-spacing: 0.04em;
-        text-shadow: 0 0 14px rgba(255, 59, 48, 0.45);
-      }
-
-      .display-panel .qty.zero {
-        color: #8a2a24;
-        text-shadow: none;
+      .display-panel sku-segment-display {
+        height: 46px;
+        aspect-ratio: 278 / 104;
       }
 
       .display-panel .unit {
         font-family: var(--mono);
         font-size: 12px;
         color: #8a8f99;
-      }
-
-      .display-panel .word {
-        align-self: center;
-        font-family: var(--mono);
-        font-weight: 600;
-        letter-spacing: 0.18em;
-        font-size: 20px;
-      }
-
-      .display-panel .word.amber {
-        color: var(--accent);
-        text-shadow: 0 0 12px rgba(224, 154, 52, 0.35);
-      }
-
-      .display-panel .word.off {
-        color: #3a404b;
       }
 
       .details {
@@ -273,16 +254,11 @@ export class LockerTile extends LitElement {
       /* Narrow tile (phone): smaller digits, labels above values, buttons across the whole width */
       @container (max-width: 210px) {
         .display-panel {
-          min-height: 64px;
           padding: 12px 8px 10px;
         }
 
-        .display-panel .qty {
-          font-size: 34px;
-        }
-
-        .display-panel .word {
-          font-size: 17px;
+        .display-panel sku-segment-display {
+          height: 34px;
         }
 
         .details {
@@ -435,23 +411,26 @@ export class LockerTile extends LitElement {
     </button>`;
   }
 
-  /** Dark panel echoing the physical LED display. */
+  /** Replica of the slot's seven-segment display, by the same rules as the firmware (Locker::refreshDisplay). */
   private renderDisplay() {
     const { locker } = this.overview;
-    if (!locker.nfc_flag) {
-      return html`<div class="display-panel"><span class="word off">– – –</span></div>`;
-    }
-    const component = locker.component;
-    if (component === null) {
-      return html`<div class="display-panel"><span class="word amber">CAL</span></div>`;
-    }
-    if (locker.quantity === null) {
-      return html`<div class="display-panel"><span class="word amber">– – –</span></div>`;
-    }
+    const counted = locker.nfc_flag && locker.component !== null && locker.quantity !== null && !locker.calibration;
     return html`<div class="display-panel">
-      <span class="qty ${locker.quantity === 0 ? "zero" : ""}">${locker.quantity}</span>
-      <span class="unit">шт</span>
+      <sku-segment-display .text=${this.displayText()}></sku-segment-display>
+      ${counted ? html`<span class="unit">шт</span>` : nothing}
     </div>`;
+  }
+
+  /** Dashes when there is nothing to count (no cell, not calibrated), the calibration prompt, or the count. */
+  private displayText(): string {
+    const { locker } = this.overview;
+    if (locker.calibration) {
+      return LockerTile.STEP_PROMPTS[locker.calibration.step];
+    }
+    if (!locker.nfc_flag || locker.component === null || locker.quantity === null) {
+      return "----";
+    }
+    return locker.quantity > SegmentDisplay.MAX_NUMBER ? " OFL" : String(locker.quantity);
   }
 
   /** Whether the cell is in the slot: green = in place, amber = pulled out. */
