@@ -164,4 +164,10 @@ class OnboardingController:
         await provisioning.claim(request.hardware_id.strip())
 
     async def settings(self, config: FromDishka[OnboardingConfig]) -> OnboardingSettingsSchema:
-        return OnboardingSettingsSchema(broker_host=config.broker_host, broker_port=config.broker_port)
+        return OnboardingSettingsSchema(
+            broker_host=config.broker_host,
+            broker_port=config.broker_port,
+            broker_tls=config.broker_tls,
+            broker_username=config.box_username,
+            broker_password=config.box_password,
+        )

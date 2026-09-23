@@ -14,3 +14,7 @@ firmware/**/secrets.h
 
 # Arduino IDE sketch export
 firmware/**/build/
+
+# Deployment secrets (VPS)
+.env
+/secrets/

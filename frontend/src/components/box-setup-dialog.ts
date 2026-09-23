@@ -8,6 +8,7 @@ import type {
   WifiNetwork,
 } from "../api/box-setup-types";
 import { BleBoxLink } from "../app/ble-box-link";
+import { BoxArrivalWatch } from "../app/box-arrival-watch";
 import type { CommandService } from "../app/command-service";
 import { Formatter } from "../app/formatter";
 import { Theme } from "./theme";
@@ -34,8 +35,12 @@ export class BoxSetupDialog extends LitElement {
     password: { state: true },
     host: { state: true },
     port: { state: true },
+    tls: { state: true },
+    serverFromBackend: { state: true },
+    editServer: { state: true },
     status: { state: true },
     linkLost: { state: true },
+    handoverTimedOut: { state: true },
   };
 
   static override styles = [
@@ -168,6 +173,25 @@ export class BoxSetupDialog extends LitElement {
         width: 100%;
       }
 
+      .server {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        font-size: 13px;
+      }
+
+      label.check {
+        flex-direction: row;
+        align-items: center;
+        gap: 8px;
+        color: var(--text);
+      }
+
+      label.check input {
+        width: auto;
+      }
+
       .row {
         display: grid;
         grid-template-columns: 1fr 110px;
@@ -230,6 +254,10 @@ export class BoxSetupDialog extends LitElement {
     `,
   ];
 
+  // How long a cloud box may take from turning Bluetooth off to showing up on the server
+  private static readonly HANDOVER_TIMEOUT_MS = 60_000;
+  private static readonly PLAIN_PORT = 1883;
+  private static readonly TLS_PORT = 8883;
   private static readonly HOST_STORAGE_KEY = "smartsku.setup.brokerHost";
   private static readonly LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
   private static readonly PROGRESS: { state: StatusMessage["state"]; label: string }[] = [
@@ -252,10 +280,20 @@ export class BoxSetupDialog extends LitElement {
   declare password: string;
   declare host: string;
   declare port: string;
+  declare tls: boolean;
+  /** The backend knows the broker the box must use (cloud), so the user does not type any address. */
+  declare serverFromBackend: boolean;
+  declare editServer: boolean;
   declare status: StatusMessage | null;
   declare linkLost: boolean;
+  declare handoverTimedOut: boolean;
 
+  // Box account on the cloud broker, from the backend's onboarding settings; empty for a local broker
+  private brokerUsername = "";
+  private brokerPassword = "";
   private readonly link = new BleBoxLink();
+  private readonly arrival = new BoxArrivalWatch(() => this.service.boxes());
+  private handoverTimer: number | null = null;
   private readonly format = new Formatter();
   private readonly subscriptions: (() => void)[] = [];
 
@@ -275,6 +313,7 @@ export class BoxSetupDialog extends LitElement {
   override disconnectedCallback(): void {
     super.disconnectedCallback();
     this.subscriptions.splice(0).forEach((unsubscribe) => unsubscribe());
+    this.stopWatchingArrival();
     this.link.disconnect();
   }
 
@@ -295,9 +334,15 @@ export class BoxSetupDialog extends LitElement {
     this.username = "";
     this.password = "";
     this.host = "";
-    this.port = "1883";
+    this.port = String(BoxSetupDialog.PLAIN_PORT);
+    this.tls = false;
+    this.serverFromBackend = false;
+    this.editServer = false;
+    this.brokerUsername = "";
+    this.brokerPassword = "";
     this.status = null;
     this.linkLost = false;
+    this.handoverTimedOut = false;
   }
 
   protected override render() {
@@ -327,13 +372,12 @@ export class BoxSetupDialog extends LitElement {
     return html`
       <h2>Подключить бокс</h2>
       <ol>
-        <li>Включите бокс и зажмите кнопку <b>BOOT</b> на плате на 3 секунды — встроенный светодиод начнёт коротко
-          вспыхивать раз в секунду. Новый бокс без настроек сети включает этот режим сам.</li>
+        <li>Включите бокс и зажмите <b>кнопку подключения</b> на корпусе на 3 секунды — встроенный светодиод начнёт
+          коротко вспыхивать раз в секунду. Новый бокс без настроек сети включает этот режим сам.</li>
         <li>Нажмите «Найти бокс» и выберите <span class="mono">${BleBoxLink.NAME_PREFIX}…</span> в окне браузера.</li>
         <li>Выберите Wi-Fi сеть для бокса — компьютер остаётся в своей сети.</li>
       </ol>
-      <div class="note">Не держите BOOT в момент включения питания: плата уйдёт в режим прошивки.
-        Режим подключения сам выключится через 5 минут без действий.</div>
+      <div class="note">Режим подключения сам выключится через 5 минут без действий.</div>
       ${supported
         ? nothing
         : html`<div class="note warn">Этот браузер не умеет работать с Bluetooth. Откройте дашборд в Google Chrome
@@ -365,7 +409,7 @@ export class BoxSetupDialog extends LitElement {
 
   private renderLinkLost() {
     return html`<div class="note warn">Связь с боксом по Bluetooth потеряна. Если режим подключения закончился, снова
-      зажмите BOOT на 3 секунды и нажмите «Переподключиться».</div>`;
+      зажмите кнопку подключения на 3 секунды и нажмите «Переподключиться».</div>`;
   }
 
   private renderInfo() {
@@ -388,7 +432,7 @@ export class BoxSetupDialog extends LitElement {
         </dd>
         <dt>Сервер</dt>
         <dd>
-          ${info.server.host ? `${info.server.host}:${info.server.port}` : "не настроен"}
+          ${info.server.host ? `${info.server.host}:${info.server.port}${info.server.tls ? " (TLS)" : ""}` : "не настроен"}
           ${info.server.host ? (info.server.connected ? html`<span class="ok">● на связи</span>` : "○ нет связи") : nothing}
         </dd>
         <dt>box_id</dt>
@@ -452,10 +496,33 @@ export class BoxSetupDialog extends LitElement {
               @input=${(e: Event) => (this.password = this.inputValue(e))} />
           </label>`
         : nothing}
+      ${this.serverFromBackend && !this.editServer ? this.renderServerSummary() : this.renderServerFields()}
+      <div class="actions">
+        <button type="button" @click=${this.close}>Отмена</button>
+        <button class="primary" type="submit" ?disabled=${this.busy || this.linkLost || this.info === null}>
+          Подключить
+        </button>
+      </div>
+    `;
+  }
+
+  private renderServerSummary() {
+    return html`
+      <div class="server">
+        <div>
+          Сервер: <b>${this.host}</b>${this.tls ? html` · <span class="ok">защищённое соединение</span>` : nothing}
+        </div>
+        <button type="button" @click=${() => (this.editServer = true)}>Другой сервер</button>
+      </div>
+    `;
+  }
+
+  private renderServerFields() {
+    return html`
       <div class="row">
         <label>
           Адрес сервера для бокса
-          <input .value=${this.host} required placeholder="192.168.1.10 или имя.local"
+          <input .value=${this.host} required placeholder=${this.tls ? "домен сервера" : "192.168.1.10 или имя.local"}
             @input=${(e: Event) => (this.host = this.inputValue(e))} />
         </label>
         <label>
@@ -464,16 +531,17 @@ export class BoxSetupDialog extends LitElement {
             @input=${(e: Event) => (this.port = this.inputValue(e))} />
         </label>
       </div>
+      <label class="check">
+        <input type="checkbox" .checked=${this.tls} @change=${this.toggleTls} />
+        Облачный сервер: шифрование TLS
+      </label>
       <div class="muted" style="font-size: 12px">
-        IP этого компьютера в сети бокса (на Mac: <span class="mono">ipconfig getifaddr en0</span>) или его имя
-        с <span class="mono">.local</span> (<span class="mono">scutil --get LocalHostName</span>). Имя не меняется
-        вместе с IP, но в некоторых корпоративных сетях не находится.
-      </div>
-      <div class="actions">
-        <button type="button" @click=${this.close}>Отмена</button>
-        <button class="primary" type="submit" ?disabled=${this.busy || this.linkLost || this.info === null}>
-          Подключить
-        </button>
+        ${this.tls
+          ? html`Бокс выходит в интернет через выбранную сеть и подключается к серверу по домену (не по IP — сертификат
+              выдан на домен). Сеть должна пропускать исходящие соединения на порт ${this.port}.`
+          : html`IP этого компьютера в сети бокса (на Mac: <span class="mono">ipconfig getifaddr en0</span>) или его имя
+              с <span class="mono">.local</span> (<span class="mono">scutil --get LocalHostName</span>). Имя не меняется
+              вместе с IP, но в некоторых корпоративных сетях не находится.`}
       </div>
     `;
   }
@@ -503,6 +571,8 @@ export class BoxSetupDialog extends LitElement {
     const status = this.status;
     const current = status ? this.progressIndex(status.state) : 0;
     const done = status?.state === "registered";
+    // After the handover the box turns Bluetooth off on purpose
+    const expectedLinkLoss = status?.state === "handover";
     return html`
       <h2>Подключение бокса ${this.link.deviceName}</h2>
       <ul class="steps">
@@ -512,7 +582,7 @@ export class BoxSetupDialog extends LitElement {
         })}
       </ul>
       ${this.renderStatusNote()}
-      ${this.linkLost && !done ? this.renderLinkLost() : nothing}
+      ${this.linkLost && !done && !expectedLinkLoss ? this.renderLinkLost() : nothing}
       <div class="actions">
         ${done
           ? html`<button class="primary" @click=${this.close}>Готово</button>`
@@ -538,11 +608,25 @@ export class BoxSetupDialog extends LitElement {
         </div>`;
       case "server_failed":
         return html`<div class="error">
-          Wi-Fi есть (IP бокса ${status.ip}), но сервер ${status.host}:${this.port} не отвечает. Проверьте адрес
-          компьютера, что контейнеры запущены и что бокс с компьютером в одной сети.
+          Wi-Fi есть (IP бокса ${status.ip}), но сервер ${status.host}:${this.port} не отвечает.
+          ${this.tls
+            ? "Проверьте, что сеть пускает в интернет на этот порт (корпоративные сети его часто закрывают) и что адрес — домен сервера."
+            : "Проверьте адрес компьютера, что контейнеры запущены и что бокс с компьютером в одной сети."}
         </div>`;
       case "registering":
         return html`<div class="note">Бокс на связи и ждёт box_id от бэкенда.</div>`;
+      case "handover":
+        return this.handoverTimedOut
+          ? html`<div class="error">
+              Бокс подключился к Wi-Fi и выключил Bluetooth, но за минуту так и не появился на сервере. Скорее всего,
+              сеть не пускает в интернет на порт ${this.port} (корпоративные сети его часто закрывают) — попробуйте
+              другую сеть, например раздачу с телефона. Бокс продолжает пытаться; чтобы изменить сеть, снова зажмите
+              кнопку подключения на 3 секунды и нажмите «Переподключиться».
+            </div>`
+          : html`<div class="note">
+              Бокс в Wi-Fi (IP ${status.ip}) и выключил Bluetooth: дальше он подключается к серверу через интернет.
+              Ждём его на сервере…
+            </div>`;
       case "registered":
         return html`<div class="note good">
           Бокс зарегистрирован (box_id <span class="mono">${status.box_id}</span>) и появился на складе. Для новых
@@ -568,6 +652,9 @@ export class BoxSetupDialog extends LitElement {
         this.syncAuthWithScan();
         break;
       case "status":
+        if (message.state === "handover" && this.status?.state !== "handover") {
+          this.watchArrival();
+        }
         this.status = message;
         if (message.state === "registered") {
           void this.service.refresh();
@@ -578,6 +665,29 @@ export class BoxSetupDialog extends LitElement {
         break;
     }
   };
+
+  private watchArrival(): void {
+    const hardwareId = this.info?.hardware_id;
+    if (!hardwareId) {
+      return;
+    }
+    this.handoverTimedOut = false;
+    this.handoverTimer = window.setTimeout(() => (this.handoverTimedOut = true), BoxSetupDialog.HANDOVER_TIMEOUT_MS);
+    void this.arrival.start(hardwareId, (box) => {
+      this.stopWatchingArrival();
+      this.status = { type: "status", state: "registered", box_id: box.id };
+      void this.service.refresh();
+    });
+  }
+
+  private stopWatchingArrival(): void {
+    this.arrival.stop();
+    if (this.handoverTimer !== null) {
+      window.clearTimeout(this.handoverTimer);
+      this.handoverTimer = null;
+    }
+    this.handoverTimedOut = false;
+  }
 
   private async chooseBox(): Promise<void> {
     this.busy = true;
@@ -634,6 +744,7 @@ export class BoxSetupDialog extends LitElement {
     }
     this.busy = true;
     this.error = null;
+    this.stopWatchingArrival();
     try {
       // The backend must expect this box before it asks for a box_id.
       await this.service.claimBox(info.hardware_id);
@@ -644,6 +755,9 @@ export class BoxSetupDialog extends LitElement {
         password: this.auth === "open" ? "" : this.password,
         host: this.host.trim(),
         port,
+        tls: this.tls,
+        mqtt_username: this.brokerUsername,
+        mqtt_password: this.brokerPassword,
       });
       this.rememberHost(this.host.trim());
       this.status = null;
@@ -669,13 +783,27 @@ export class BoxSetupDialog extends LitElement {
     try {
       const settings = await this.service.onboardingSettings();
       configured = settings.broker_host;
+      this.serverFromBackend = configured !== "";
       this.port = String(settings.broker_port);
+      this.tls = settings.broker_tls;
+      this.brokerUsername = settings.broker_username;
+      this.brokerPassword = settings.broker_password;
     } catch {
       // Older backend or no connection: the user can still type the address.
     }
     const pageHost = BoxSetupDialog.LOCAL_HOSTS.has(location.hostname) ? "" : location.hostname;
     this.host = configured || pageHost || this.rememberedHost();
   }
+
+  /** Keeps the usual port in step with TLS unless the user typed another one. */
+  private readonly toggleTls = (event: Event): void => {
+    this.tls = (event.target as HTMLInputElement).checked;
+    const plain = String(BoxSetupDialog.PLAIN_PORT);
+    const secure = String(BoxSetupDialog.TLS_PORT);
+    if (this.port === plain || this.port === secure) {
+      this.port = this.tls ? secure : plain;
+    }
+  };
 
   private pickNetwork(network: WifiNetwork): void {
     if (network.ssid !== this.ssid) {
@@ -693,12 +821,13 @@ export class BoxSetupDialog extends LitElement {
   }
 
   private progressIndex(state: StatusMessage["state"]): number {
-    const normalized = state === "wifi_failed" ? "wifi_connecting" : state === "server_failed" ? "server_connecting" : state;
+    const normalized =
+      state === "wifi_failed" ? "wifi_connecting" : state === "server_failed" || state === "handover" ? "server_connecting" : state;
     return BoxSetupDialog.PROGRESS.findIndex((item) => item.state === normalized);
   }
 
   private failed(): boolean {
-    return this.status?.state === "wifi_failed" || this.status?.state === "server_failed";
+    return this.status?.state === "wifi_failed" || this.status?.state === "server_failed" || this.handoverTimedOut;
   }
 
   private wifiReason(status: StatusMessage): string {
@@ -753,6 +882,7 @@ export class BoxSetupDialog extends LitElement {
   };
 
   private readonly handleClose = (): void => {
+    this.stopWatchingArrival();
     this.link.disconnect();
     this.reset();
   };

@@ -15,6 +15,9 @@ NetworkSettings BoxStorage::networkSettings() {
   settings.password = prefs_.getString("wifi_pass", "");
   settings.mqttHost = prefs_.getString("mqtt_host", "");
   settings.mqttPort = prefs_.getUShort("mqtt_port", 0);
+  settings.mqttTls = prefs_.getBool("mqtt_tls", false);
+  settings.mqttUsername = prefs_.getString("mqtt_user", "");
+  settings.mqttPassword = prefs_.getString("mqtt_pass", "");
   return settings;
 }
 
@@ -24,6 +27,9 @@ void BoxStorage::saveNetworkSettings(const NetworkSettings &settings) {
   prefs_.putString("wifi_pass", settings.password);
   prefs_.putString("mqtt_host", settings.mqttHost);
   prefs_.putUShort("mqtt_port", settings.mqttPort);
+  prefs_.putBool("mqtt_tls", settings.mqttTls);
+  prefs_.putString("mqtt_user", settings.mqttUsername);
+  prefs_.putString("mqtt_pass", settings.mqttPassword);
 }
 
 String BoxStorage::boxId() {

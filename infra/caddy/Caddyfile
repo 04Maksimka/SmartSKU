@@ -1,0 +1,12 @@
+# Public entry point on the VPS: HTTPS with an automatic Let's Encrypt certificate, dashboard behind a login.
+# Values come from .env next to docker-compose.prod.yml (see .env.example).
+{$SMARTSKU_DOMAIN} {
+	encode gzip
+
+	basic_auth {
+		{$SMARTSKU_DASHBOARD_USER} {$SMARTSKU_DASHBOARD_PASSWORD_HASH}
+	}
+
+	# The frontend's nginx serves the page and proxies /api to the backend
+	reverse_proxy frontend:80
+}

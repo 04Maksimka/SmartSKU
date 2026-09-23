@@ -1,6 +1,6 @@
 import type { OnboardingSettings } from "../api/box-setup-types";
 import type { ApiClient } from "../api/client";
-import type { Calibration, CalibrationRequest, ScaleAction, ScaleResult } from "../api/types";
+import type { Box, Calibration, CalibrationRequest, ScaleAction, ScaleResult } from "../api/types";
 import type { DashboardStore } from "./dashboard-store";
 
 /** Write side of the dashboard: every action refreshes the snapshot so the screen never lags behind. */
@@ -12,6 +12,10 @@ export class CommandService {
 
   async claimBox(hardwareId: string): Promise<void> {
     await this.api.claimBox(hardwareId);
+  }
+
+  boxes(): Promise<Box[]> {
+    return this.api.boxes();
   }
 
   onboardingSettings(): Promise<OnboardingSettings> {

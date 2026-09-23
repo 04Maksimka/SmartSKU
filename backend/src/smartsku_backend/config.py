@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from typing import Any
 
 import yaml
 from pydantic import BaseModel
@@ -27,6 +28,9 @@ class MqttConfig(BaseModel):
     topic_prefix: str
     reconnect_interval_seconds: float
     keepalive_seconds: int
+    # Empty: anonymous (local broker). The cloud broker requires a login, the password comes from the secrets file
+    username: str = ""
+    password: str = ""
 
 
 class TelemetryConfig(BaseModel):
@@ -47,6 +51,10 @@ class OnboardingConfig(BaseModel):
     # Empty host: the dashboard suggests the address it was opened with
     broker_host: str = ""
     broker_port: int = 1883
+    # Cloud broker: TLS and the account a box logs in with; the dashboard hands them to the box over Bluetooth
+    broker_tls: bool = False
+    box_username: str = ""
+    box_password: str = ""
     # A box connected from the dashboard must register within this time
     claim_ttl_minutes: float = 30
 
@@ -66,10 +74,29 @@ class AppConfig(BaseModel):
 
 
 class ConfigLoader:
+    """Reads the yaml config and, if SMARTSKU_BACKEND_SECRETS is set, merges a secrets yaml of the same shape over it
+    (passwords stay out of git)."""
+
     ENV_VARIABLE = "SMARTSKU_BACKEND_CONFIG"
+    SECRETS_ENV_VARIABLE = "SMARTSKU_BACKEND_SECRETS"
     DEFAULT_PATH = Path("config/config.local.yaml")
 
     def load(self) -> AppConfig:
-        path = Path(os.environ.get(self.ENV_VARIABLE, self.DEFAULT_PATH))
+        data = self._read(Path(os.environ.get(self.ENV_VARIABLE, self.DEFAULT_PATH)))
+        secrets_path = os.environ.get(self.SECRETS_ENV_VARIABLE)
+        if secrets_path:
+            data = self._merge(data, self._read(Path(secrets_path)))
+        return AppConfig.model_validate(data)
+
+    def _read(self, path: Path) -> dict[str, Any]:
         with path.open(encoding="utf-8") as file:
-            return AppConfig.model_validate(yaml.safe_load(file))
+            return yaml.safe_load(file) or {}
+
+    def _merge(self, base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+        merged = dict(base)
+        for key, value in override.items():
+            if isinstance(value, dict) and isinstance(merged.get(key), dict):
+                merged[key] = self._merge(merged[key], value)
+            else:
+                merged[key] = value
+        return merged

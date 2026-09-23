@@ -1,0 +1,11 @@
+# Topic access in the cloud broker. Users and passwords: secrets/mosquitto/passwd on the VPS (not in git).
+
+# Backend: everything
+user backend
+topic readwrite smartsku/#
+
+# Boxes (one shared account, handed to a box over Bluetooth when it is connected from the dashboard)
+user box
+topic write smartsku/provision/request
+topic read smartsku/provision/response/+
+topic readwrite smartsku/boxes/#
