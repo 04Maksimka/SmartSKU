@@ -286,6 +286,26 @@ cd frontend && npm install && npm run dev   # http://localhost:5173, /api про
 npm run build                               # tsc (проверка типов) + сборка
 ```
 
+### Облако (VPS, https://app-smartsku.online)
+VPS 171.22.132.23 (Ubuntu 24.04, 1 vCPU, 2 ГБ ОЗУ + 2 ГБ swap, 30 ГБ), код в `/opt/smartsku`, вход по SSH-ключу
+(`ssh smartsku-vps`). Поверх обычного compose — `docker-compose.prod.yml`: наружу торчит только Caddy (80/443,
+сертификат Let's Encrypt сам, дашборд под `basic_auth`), остальные сервисы без опубликованных портов — Docker
+публикует порты в обход `ufw`. Секреты — `.env` на сервере (образец `.env.example`, в git не попадает).
+`ufw`: открыты 22, 80, 443.
+
+**Этап 1 (сделан):** дашборд и API по HTTPS. **Этап 2 (не сделан):** боксы в облаке — MQTT по TLS на 8883, учётки
+боксов и ACL в брокере, выдача учётки через claim/Bluetooth, `WiFiClientSecure` + NTP в прошивке. Пока брокер в
+облаке снаружи недоступен, и боксы работают только с локальным стеком.
+
+Выкатка текущей рабочей копии:
+```bash
+git ls-files -co --exclude-standard -- backend frontend infra json_contracts docker-compose*.yml .env.example \
+  | COPYFILE_DISABLE=1 tar -czf - -T - | ssh smartsku-vps 'tar -xzf - -C /opt/smartsku'
+ssh smartsku-vps 'cd /opt/smartsku && docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build'
+```
+Сменить пароль дашборда: `docker run --rm caddy:2 caddy hash-password --plaintext '<пароль>'`, записать хеш в `.env`
+(каждый `$` → `$$`) и перезапустить `caddy`.
+
 ### Прошивка ESP32 (`firmware/`)
 Скетч Arduino IDE (`.ino` называется так же, как папка). Проверено на DOIT ESP32 DEVKIT V1 (ESP32-D0WD-V3),
 пакет esp32 3.3.x (старый 1.0.6 не собирается на macOS: требует `python`).
