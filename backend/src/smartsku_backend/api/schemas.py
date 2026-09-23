@@ -3,6 +3,7 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field
 
 from smartsku_backend.db.models import CalibrationStatus, InventoryEventType
+from smartsku_backend.messaging.contracts import ScaleAction
 
 
 class OrmSchema(BaseModel):
@@ -35,16 +36,37 @@ class ComponentSchema(OrmSchema):
     calibrated_at: datetime
 
 
+class CalibrationProgressSchema(BaseModel):
+    """Calibration the box is walking through; step names are listed in messaging/contracts.py."""
+
+    step: str
+    num_of_pieces: int
+
+
 class LockerSchema(BaseModel):
     box_id: str
     locker_id: int
     nfc_flag: bool
     nfc_id: str | None
-    weight: float
+    weight: float = Field(description="Content weight, grams")
     quantity: int | None
-    zeroed: bool
+    slot_ready: bool = Field(description="The load cell has its zero and scale")
+    cell_tared: bool = Field(description="The inserted cell has its empty weight in the NFC tag")
+    tag_error: bool = Field(description="The NFC tag of the inserted cell cannot be read")
+    calibration: CalibrationProgressSchema | None
     updated_at: datetime
     component: ComponentSchema | None
+
+
+class ScaleRequest(BaseModel):
+    action: ScaleAction
+    grams: float | None = Field(default=None, gt=0, description="Reference weight, required for reference")
+
+
+class ScaleResultSchema(BaseModel):
+    action: ScaleAction
+    value: float = Field(description="zero: raw reading, reference: counts per gram, cell_tare: grams")
+    nfc_id: str | None
 
 
 class CalibrationRequest(BaseModel):

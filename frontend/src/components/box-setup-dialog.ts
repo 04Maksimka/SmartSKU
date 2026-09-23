@@ -397,7 +397,7 @@ export class BoxSetupDialog extends LitElement {
       <h3>Ячейки: работают ${working} из ${info.lockers.length}</h3>
       <table>
         <thead>
-          <tr><th>Слот</th><th>Весы</th><th>NFC</th><th>Дисплей</th><th>Ноль</th><th>Ячейка</th></tr>
+          <tr><th>Слот</th><th>Весы</th><th>NFC</th><th>Дисплей</th><th>Слот</th><th>Ячейка</th></tr>
         </thead>
         <tbody>
           ${info.lockers.map(
@@ -406,7 +406,7 @@ export class BoxSetupDialog extends LitElement {
               <td>${this.mark(locker.load_cell)}</td>
               <td>${this.mark(locker.nfc_reader)}</td>
               <td>${locker.display ? "есть" : "—"}</td>
-              <td>${locker.zeroed ? "есть" : html`<span class="missing">нет</span>`}</td>
+              <td>${locker.slot_ready ? "настроен" : html`<span class="missing">не настроен</span>`}</td>
               <td class="mono">${locker.cell || "—"}</td>
             </tr>`,
           )}

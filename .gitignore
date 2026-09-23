@@ -11,3 +11,6 @@ dist/
 
 # Arduino: Wi-Fi passwords and broker addresses
 firmware/**/secrets.h
+
+# Arduino IDE sketch export
+firmware/**/build/

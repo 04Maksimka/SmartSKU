@@ -132,7 +132,7 @@ void BoxApp::update() {
     requestBoxId();
   }
   if (online) {
-    publishTareResults();
+    publishResults();
   }
   if (online && now - lastTelemetryMs_ >= AppConfig::TELEMETRY_INTERVAL_MS) {
     lastTelemetryMs_ = now;
@@ -249,11 +249,21 @@ void BoxApp::handleCommand(const String &payload) {
       return;
     }
     locker->startCalibration(pieces);
-  } else if (command == "tare") {
-    startTare(*locker);
+  } else if (command == "scale") {
+    String action = doc["action"] | "";
+    Locker::ScaleAction scaleAction = Locker::parseScaleAction(action);
+    if (scaleAction == Locker::ScaleAction::None) {
+      Serial.printf("[app] ERROR: unknown scale action %s\n", action.c_str());
+      return;
+    }
+    locker->startScale(scaleAction, doc["grams"] | AppConfig::REFERENCE_GRAMS);
+  } else if (command == "cancel") {
+    locker->cancelCalibration();
   } else if (command == "indicators") {
     String color = doc["led_color"] | "none";
-    if (!locker->applyIndicators(color, doc["screen_number"] | 0)) {
+    // screen_number: null — прочерки (ячейки нет, у неё нет тары или она не откалибрована)
+    JsonVariant screenNumber = doc["screen_number"];
+    if (!locker->applyIndicators(color, !screenNumber.isNull(), screenNumber | 0)) {
       Serial.printf("[app] unknown led_color %s\n", color.c_str());
     }
   } else {
@@ -261,44 +271,18 @@ void BoxApp::handleCommand(const String &payload) {
   }
 }
 
-void BoxApp::startTare(Locker &locker) {
-  Locker::TareStart result = locker.requestTare();
-  if (result != Locker::TareStart::Started) {
-    publishTareFailure(locker.id(), result);
-  }
-}
-
-// Бэкенд пишет результат в журнал, а фронт по нему убирает подсказку «держите ячейку неподвижно»
-void BoxApp::publishTareResults() {
+// Бэкенд пишет итог в журнал и завершает заявку на калибровку, фронт по нему закрывает чек-лист
+void BoxApp::publishResults() {
   for (auto &locker : lockers_) {
-    double zero = 0;
-    if (!locker->takeTareDone(zero)) {
+    JsonDocument doc;
+    if (!locker->takeResult(doc.to<JsonObject>())) {
       continue;
     }
-    JsonDocument doc;
-    doc["event"] = "tare_done";
     doc["box_id"] = boxId_;
-    doc["locker_id"] = locker->id();
-    doc["nfc_id"] = locker->cellUid();
-    doc["tare"] = std::round(zero * 10) / 10;
     String payload;
     serializeJson(doc, payload);
     mqtt_.publish(BoxTopics::events(boxId_), payload);
   }
-}
-
-void BoxApp::publishTareFailure(uint8_t lockerId, Locker::TareStart result) {
-  if (boxId_.isEmpty() || !mqtt_.connected()) {
-    return;
-  }
-  JsonDocument doc;
-  doc["event"] = "tare_failed";
-  doc["box_id"] = boxId_;
-  doc["locker_id"] = lockerId;
-  doc["reason"] = result == Locker::TareStart::NoCell ? "no_cell" : "load_cell_failed";
-  String payload;
-  serializeJson(doc, payload);
-  mqtt_.publish(BoxTopics::events(boxId_), payload);
 }
 
 Locker *BoxApp::findLocker(int lockerId) {
@@ -312,8 +296,20 @@ void BoxApp::handleConsole(const ConsoleCommand &command) {
   switch (command.type) {
     case ConsoleCommand::Type::None:
       break;
-    case ConsoleCommand::Type::Tare:
-      startTare(*lockers_[command.lockerId]);
+    case ConsoleCommand::Type::Zero:
+      lockers_[command.lockerId]->startScale(Locker::ScaleAction::Zero, 0);
+      break;
+    case ConsoleCommand::Type::Reference:
+      lockers_[command.lockerId]->startScale(Locker::ScaleAction::Reference, command.grams);
+      break;
+    case ConsoleCommand::Type::CellTare:
+      lockers_[command.lockerId]->startScale(Locker::ScaleAction::CellTare, 0);
+      break;
+    case ConsoleCommand::Type::EraseTag:
+      lockers_[command.lockerId]->eraseTag();
+      break;
+    case ConsoleCommand::Type::Cancel:
+      lockers_[command.lockerId]->cancelCalibration();
       break;
     case ConsoleCommand::Type::Status:
       printStatus();
@@ -329,7 +325,7 @@ void BoxApp::handleConsole(const ConsoleCommand &command) {
       ESP.restart();
       break;
     case ConsoleCommand::Type::Reset:
-      Serial.println("[app] box_id, zeros and piece weights erased, rebooting");
+      Serial.println("[app] box_id and slot data erased, rebooting");
       storage_.resetKeepingNetwork();
       Serial.flush();
       ESP.restart();

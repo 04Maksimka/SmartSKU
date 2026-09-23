@@ -6,7 +6,6 @@
 Locker::Locker(uint8_t lockerId, const LockerHardware &hardware, BoxStorage &storage, LoadCellBus &loadCellBus)
   : id_(lockerId),
     hardware_(hardware),
-    invertLoad_(hardware.invertLoad),
     storage_(storage),
     loadCellBus_(loadCellBus),
     nfc_(hardware.rfidSs),
@@ -23,11 +22,12 @@ void Locker::begin() {
   loadCellBus_.attach(hardware_.hxDout, loadCell_);
   loadCell_.begin();
   nfc_.begin(id_);
-  hasZero_ = storage_.loadZero(id_, zeroOffset_);
-  if (hasZero_) {
-    Serial.printf("[locker %u] zero: %.0f\n", id_, zeroOffset_);
+  hasZero_ = storage_.loadZero(id_, zeroRaw_);
+  countsPerGram_ = storage_.countsPerGram(id_);
+  if (slotReady()) {
+    Serial.printf("[locker %u] zero %.0f, %.2f counts per gram\n", id_, zeroRaw_, countsPerGram_);
   } else {
-    Serial.printf("[locker %u] no zero yet: insert the EMPTY cell and set zero from the dashboard (or send 't')\n", id_);
+    Serial.printf("[locker %u] load cell is not set up: zero it and put the reference weight on it\n", id_);
   }
 }
 
@@ -35,33 +35,48 @@ void Locker::update() {
   if (loadCell_.update()) {
     onWindow();
   }
+  if (resultShown_ && millis() - resultShownAtMs_ >= AppConfig::RESULT_SHOW_MS) {
+    resultShown_ = false;
+    refreshDisplay();
+  }
 }
 
 void Locker::pollNfc() {
   if (nfc_.update()) {
     onCellChanged();
   }
+  NfcReader::WriteResult written = nfc_.takeWriteResult();
+  if (written != NfcReader::WriteResult::None) {
+    onTagWritten(written);
+  }
 }
 
 void Locker::onCellChanged() {
-  pieceWeight_ = nfc_.present() ? storage_.pieceWeight(nfc_.uid()) : 0;
-  emptyWarned_ = false;
-  if (nfc_.present()) {
-    // Последнее окно мерило слот без ячейки — ждём свежих и стабильных показаний
-    settled_ = false;
-    insertedAtMs_ = millis();
-    stableWindows_ = 0;
-    windowReady_ = false;
-    loadCell_.restartWindow();
-    if (pieceWeight_ > 0) {
-      Serial.printf("[locker %u] cell %s: piece weight %.2f\n", id_, nfc_.uid().c_str(), pieceWeight_);
-    }
-  } else {
-    settled_ = true;
-    reportedWeight_ = 0;
-    if (pendingPieces_ > 0) {
-      cellWasRemoved_ = true;
-    }
+  // Текущее окно мерило слот ещё в прошлом состоянии — ждём свежих показаний
+  restartStability();
+  loadCell_.restartWindow();
+  windowReady_ = false;
+  reportedValid_ = false;
+  bool present = nfc_.present();
+  settled_ = !present;
+  insertedAtMs_ = millis();
+
+  if (scaleAction_ == ScaleAction::CellTare && !present && !scaleWriting_) {
+    finishScale(false, "no_cell");
+  } else if ((scaleAction_ == ScaleAction::Zero || scaleAction_ == ScaleAction::Reference) && present) {
+    finishScale(false, "cell_present");
+  }
+  switch (step_) {
+    case Step::RemoveCell:
+    case Step::MeasurePieces:
+      setStep(present ? step_ : Step::InsertFilled);
+      break;
+    case Step::InsertFilled:
+      setStep(present ? Step::MeasurePieces : step_);
+      break;
+    default:
+      // Если ячейку выдернули посреди записи, NfcReader сообщит о неудаче
+      break;
   }
   refreshDisplay();
 }
@@ -69,6 +84,12 @@ void Locker::onCellChanged() {
 void Locker::onWindow() {
   if (loadCell_.failed()) {
     windowReady_ = false;
+    if (scaleAction_ != ScaleAction::None) {
+      finishScale(false, "load_cell_failed");
+    }
+    if (step_ != Step::None) {
+      finishCalibration(false, "load_cell_failed");
+    }
     display_.showError();
     if (!loadCellFailureLogged_) {
       loadCellFailureLogged_ = true;
@@ -83,127 +104,328 @@ void Locker::onWindow() {
   if (loadCellFailureLogged_) {
     loadCellFailureLogged_ = false;
     Serial.printf("[locker %u] HX711 data is back\n", id_);
-    refreshDisplay();
   }
   windowReady_ = true;
-  if (tareWindowsLeft_ > 0) {
-    applyTare();
-    return;
+  trackStability();
+  if (!settled_ && (stable() || millis() - insertedAtMs_ >= AppConfig::SETTLE_TIMEOUT_MS)) {
+    settled_ = true;
   }
-  trackSettling();
-  trackCalibration();
+  if (scaleAction_ != ScaleAction::None) {
+    advanceScale();
+  }
+  if (step_ != Step::None) {
+    advanceCalibration();
+  }
   updateReportedWeight();
   refreshDisplay();
 }
 
-Locker::TareStart Locker::requestTare() {
-  if (!nfc_.present()) {
-    Serial.printf("[locker %u] tare rejected: insert the empty cell\n", id_);
-    return TareStart::NoCell;
-  }
-  if (loadCell_.failed()) {
-    Serial.printf("[locker %u] tare rejected: no HX711 data\n", id_);
-    return TareStart::LoadCellFailed;
-  }
-  tareWindowsLeft_ = AppConfig::TARE_WINDOWS;
-  tareSum_ = 0;
-  loadCell_.restartWindow();
-  display_.showDashes();
-  Serial.printf(
-    "[locker %u] taring: keep the empty cell still for %lu ms\n", id_, AppConfig::MEASURE_WINDOW_MS * AppConfig::TARE_WINDOWS
-  );
-  return TareStart::Started;
-}
-
-bool Locker::takeTareDone(double &zero) {
-  if (!tareDone_) {
-    return false;
-  }
-  tareDone_ = false;
-  zero = zeroOffset_;
-  return true;
-}
-
-void Locker::applyTare() {
-  tareSum_ += loadCell_.average();
-  if (--tareWindowsLeft_ > 0) {
-    return;
-  }
-  zeroOffset_ = tareSum_ / AppConfig::TARE_WINDOWS;
-  hasZero_ = true;
-  tareDone_ = true;
-  storage_.saveZero(id_, zeroOffset_);
-  reportedWeight_ = 0;
-  Serial.printf("[locker %u] zero saved: %.0f. Put something into the cell: net must grow, otherwise set invertLoad\n", id_, zeroOffset_);
-  refreshDisplay();
-}
-
-void Locker::trackSettling() {
-  double weight = measuredWeight();
-  bool stable = stableWindows_ > 0 && std::fabs(weight - previousWeight_) < AppConfig::NOISE_UNITS;
-  stableWindows_ = stable ? stableWindows_ + 1 : 1;
-  previousWeight_ = weight;
-  if (settled_) {
-    return;
-  }
-  if (stableWindows_ >= AppConfig::STABLE_WINDOWS) {
-    settled_ = true;
-  } else if (millis() - insertedAtMs_ >= AppConfig::SETTLE_TIMEOUT_MS) {
-    settled_ = true;
-    Serial.printf("[locker %u] weight is not stable after insert, reporting anyway\n", id_);
-  }
-  if (settled_) {
-    // Первое значение после вставки отправляем как есть, без гистерезиса
-    reportedWeight_ = weight;
-  }
-}
-
-// Вес штуки считаем только по установившемуся весу, в том же окне, что и первая телеметрия после вставки
-void Locker::trackCalibration() {
-  if (pendingPieces_ <= 0 || !cellWasRemoved_ || !nfc_.present() || !hasZero_ || !settled_) {
-    return;
-  }
-  double weight = measuredWeight();
-  if (weight < AppConfig::EMPTY_UNITS) {
-    if (!emptyWarned_) {
-      Serial.printf("[locker %u] cell looks empty (%.0f), calibration still waits for components\n", id_, weight);
-      emptyWarned_ = true;
+void Locker::trackStability() {
+  double raw = loadCell_.average();
+  if (stableWindows_ > 0 && std::fabs(raw - previousRaw_) < AppConfig::NOISE_UNITS) {
+    if (stableWindows_ < AppConfig::STABLE_AVERAGE_WINDOWS) {
+      ++stableWindows_;
+      stableSum_ += raw;
+    } else {
+      // Скользящее среднее по последним окнам: медленный дрейф не тянет за собой старые значения
+      stableSum_ += raw - stableSum_ / stableWindows_;
     }
-    return;
+  } else {
+    stableWindows_ = 1;
+    stableSum_ = raw;
   }
-  pieceWeight_ = weight / pendingPieces_;
-  storage_.savePieceWeight(nfc_.uid(), pieceWeight_);
-  reportedWeight_ = weight;
-  Serial.printf("[locker %u] calibrated cell %s: %.0f / %d = %.2f per piece\n", id_, nfc_.uid().c_str(), weight, pendingPieces_, pieceWeight_);
-  pendingPieces_ = 0;
-  cellWasRemoved_ = false;
+  previousRaw_ = raw;
+}
+
+void Locker::restartStability() {
+  stableWindows_ = 0;
+  stableSum_ = 0;
+}
+
+double Locker::measuredRaw() const {
+  return stableWindows_ > 0 ? stableSum_ / stableWindows_ : loadCell_.average();
 }
 
 // Гистерезис: шум не превращается в поток изменений на бэкенде, а сдвиг на полштуки виден всегда
 void Locker::updateReportedWeight() {
-  if (!settled_) {
+  if (!measurable()) {
+    reportedValid_ = false;
     return;
   }
-  double threshold = AppConfig::NOISE_UNITS;
-  if (pieceWeight_ > 0) {
-    threshold = std::min(threshold, pieceWeight_ / 2);
+  double weight = contentWeight(loadCell_.average());
+  double threshold = AppConfig::REPORT_STEP_GRAMS;
+  if (pieceWeight() > 0) {
+    threshold = std::min(threshold, pieceWeight() / 2);
   }
-  double weight = measuredWeight();
-  if (std::fabs(weight - reportedWeight_) >= threshold) {
+  if (!reportedValid_ || std::fabs(weight - reportedWeight_) >= threshold) {
     reportedWeight_ = weight;
+    reportedValid_ = true;
   }
+}
+
+Locker::ScaleAction Locker::parseScaleAction(const String &name) {
+  if (name == "zero") {
+    return ScaleAction::Zero;
+  }
+  if (name == "reference") {
+    return ScaleAction::Reference;
+  }
+  if (name == "cell_tare") {
+    return ScaleAction::CellTare;
+  }
+  return ScaleAction::None;
+}
+
+void Locker::startScale(ScaleAction action, double grams) {
+  if (busy()) {
+    reportBusy("scale_failed", action);
+    return;
+  }
+  scaleAction_ = action;
+  referenceGrams_ = grams;
+  scaleWriting_ = false;
+  resultShown_ = false;
+  Serial.printf("[locker %u] %s started\n", id_, actionName(action));
+  bool present = nfc_.present();
+  if (loadCell_.failed()) {
+    finishScale(false, "load_cell_failed");
+  } else if (action != ScaleAction::CellTare && present) {
+    finishScale(false, "cell_present");
+  } else if (action == ScaleAction::Reference && !hasZero_) {
+    finishScale(false, "slot_not_zeroed");
+  } else if (action == ScaleAction::CellTare && !present) {
+    finishScale(false, "no_cell");
+  } else if (action == ScaleAction::CellTare && !slotReady()) {
+    finishScale(false, "slot_not_ready");
+  } else {
+    // Мерим только то, что лежит на площадке после команды
+    restartStability();
+    loadCell_.restartWindow();
+    scaleStartedMs_ = millis();
+    refreshDisplay();
+  }
+}
+
+void Locker::advanceScale() {
+  if (scaleWriting_) {
+    return;
+  }
+  if (!stable()) {
+    if (millis() - scaleStartedMs_ >= AppConfig::SETTLE_TIMEOUT_MS) {
+      finishScale(false, "unstable");
+    }
+    return;
+  }
+  double raw = measuredRaw();
+  switch (scaleAction_) {
+    case ScaleAction::Zero:
+      zeroRaw_ = raw;
+      hasZero_ = true;
+      storage_.saveZero(id_, zeroRaw_);
+      finishScale(true, "", zeroRaw_);
+      break;
+    case ScaleAction::Reference: {
+      double delta = raw - zeroRaw_;
+      if (std::fabs(delta) < AppConfig::MIN_LOAD_UNITS) {
+        finishScale(false, "no_weight_change");
+        return;
+      }
+      // Знак масштаба — направление датчика: у части датчиков нагрузка уменьшает показания
+      countsPerGram_ = delta / referenceGrams_;
+      storage_.saveCountsPerGram(id_, countsPerGram_);
+      finishScale(true, "", countsPerGram_);
+      break;
+    }
+    case ScaleAction::CellTare: {
+      if (nfc_.tagState() == NfcReader::TagState::Unsupported) {
+        finishScale(false, "tag_unsupported");
+        return;
+      }
+      if (nfc_.tagState() != NfcReader::TagState::Ready) {
+        return;
+      }
+      measuredTare_ = grams(raw);
+      if (measuredTare_ < AppConfig::MIN_LOAD_GRAMS) {
+        finishScale(false, "no_weight_change");
+        return;
+      }
+      CellTag tag = nfc_.tag();
+      tag.hasTare = true;
+      tag.tare = measuredTare_;
+      nfc_.requestWrite(tag);
+      scaleWriting_ = true;
+      break;
+    }
+    case ScaleAction::None:
+      break;
+  }
+}
+
+void Locker::finishScale(bool success, const char *reason, double value) {
+  result_.clear();
+  result_["event"] = success ? "scale_done" : "scale_failed";
+  result_["locker_id"] = id_;
+  result_["action"] = actionName(scaleAction_);
+  if (success) {
+    result_["value"] = std::round(value * 100) / 100;
+    if (scaleAction_ == ScaleAction::CellTare) {
+      result_["nfc_id"] = nfc_.uid();
+    }
+    Serial.printf("[locker %u] %s done: %.2f\n", id_, actionName(scaleAction_), value);
+  } else {
+    result_["reason"] = reason;
+    Serial.printf("[locker %u] %s failed: %s\n", id_, actionName(scaleAction_), reason);
+  }
+  scaleAction_ = ScaleAction::None;
+  scaleWriting_ = false;
+  showResult(success);
+}
+
+// Отказ новой команде, а то, что уже идёт, продолжается
+void Locker::reportBusy(const char *event, ScaleAction action) {
+  Serial.printf("[locker %u] busy, %s refused\n", id_, action == ScaleAction::None ? "calibration" : actionName(action));
+  result_.clear();
+  result_["event"] = event;
+  result_["locker_id"] = id_;
+  if (action != ScaleAction::None) {
+    result_["action"] = actionName(action);
+  }
+  result_["reason"] = "busy";
 }
 
 void Locker::startCalibration(int numOfPieces) {
+  if (busy()) {
+    reportBusy("calibration_failed", ScaleAction::None);
+    return;
+  }
   pendingPieces_ = numOfPieces;
-  // Если ячейка уже вынута, ждём только вставки; иначе сначала её должны вынуть и насыпать компоненты
-  cellWasRemoved_ = !nfc_.present();
-  emptyWarned_ = false;
-  Serial.printf("[locker %u] calibration for %d pieces: pull the cell out, fill it and insert back\n", id_, numOfPieces);
+  resultShown_ = false;
+  bool present = nfc_.present();
+  if (loadCell_.failed()) {
+    finishCalibration(false, "load_cell_failed");
+  } else if (!slotReady()) {
+    finishCalibration(false, "slot_not_ready");
+  } else if (present && nfc_.tagState() == NfcReader::TagState::Unsupported) {
+    finishCalibration(false, "tag_unsupported");
+  } else if (present && nfc_.tagState() == NfcReader::TagState::Ready && !nfc_.tag().hasTare) {
+    finishCalibration(false, "cell_not_tared");
+  } else {
+    setStep(present ? Step::RemoveCell : Step::InsertFilled);
+  }
 }
 
-bool Locker::applyIndicators(const String &ledColor, int screenNumber) {
-  hasScreenNumber_ = true;
+void Locker::cancelCalibration() {
+  if (step_ == Step::None) {
+    return;
+  }
+  Serial.printf("[locker %u] calibration cancelled\n", id_);
+  step_ = Step::None;
+  pendingPieces_ = 0;
+  reportedValid_ = false;
+  refreshDisplay();
+}
+
+void Locker::setStep(Step step) {
+  if (step == step_) {
+    return;
+  }
+  step_ = step;
+  Serial.printf("[locker %u] calibration: %s\n", id_, stepName());
+  refreshDisplay();
+}
+
+void Locker::advanceCalibration() {
+  if (step_ != Step::MeasurePieces || !nfc_.present() || !settled_) {
+    return;
+  }
+  switch (nfc_.tagState()) {
+    case NfcReader::TagState::Unsupported:
+      finishCalibration(false, "tag_unsupported");
+      return;
+    case NfcReader::TagState::Ready:
+      break;
+    default:
+      return;
+  }
+  if (!cellTared()) {
+    finishCalibration(false, "cell_not_tared");
+    return;
+  }
+  double content = contentWeight(measuredRaw());
+  if (content < AppConfig::MIN_LOAD_GRAMS) {
+    Serial.printf("[locker %u] the cell looks empty (%.1f g): pull it out and pour %d pieces\n", id_, content, pendingPieces_);
+    setStep(Step::RemoveCell);
+    return;
+  }
+  measuredContent_ = content;
+  CellTag tag = nfc_.tag();
+  tag.hasPiece = true;
+  tag.pieceWeight = content / pendingPieces_;
+  nfc_.requestWrite(tag);
+  setStep(Step::WriteTag);
+}
+
+void Locker::finishCalibration(bool success, const char *reason) {
+  result_.clear();
+  result_["event"] = success ? "calibration_done" : "calibration_failed";
+  result_["locker_id"] = id_;
+  if (success) {
+    result_["nfc_id"] = nfc_.uid();
+    result_["piece_weight"] = std::round(nfc_.tag().pieceWeight * 1000) / 1000;
+    result_["weight"] = std::round(measuredContent_ * 10) / 10;
+    Serial.printf("[locker %u] calibrated: %.1f g / %d = %.3f g\n", id_, measuredContent_, pendingPieces_, nfc_.tag().pieceWeight);
+  } else {
+    result_["reason"] = reason;
+    Serial.printf("[locker %u] calibration failed: %s\n", id_, reason);
+  }
+  step_ = Step::None;
+  pendingPieces_ = 0;
+  reportedValid_ = false;
+  showResult(success);
+}
+
+void Locker::eraseTag() {
+  if (busy() || erasingTag_) {
+    Serial.printf("[locker %u] busy, tag erase refused\n", id_);
+  } else if (!nfc_.present()) {
+    Serial.printf("[locker %u] no cell, nothing to erase\n", id_);
+  } else {
+    nfc_.requestWrite(CellTag());
+    erasingTag_ = true;
+  }
+}
+
+void Locker::onTagWritten(NfcReader::WriteResult result) {
+  bool ok = result == NfcReader::WriteResult::Done;
+  if (erasingTag_) {
+    erasingTag_ = false;
+    Serial.printf("[locker %u] tag erase %s\n", id_, ok ? "done" : "failed");
+  } else if (scaleAction_ == ScaleAction::CellTare && scaleWriting_) {
+    finishScale(ok, "tag_write_failed", measuredTare_);
+  } else if (step_ == Step::WriteTag) {
+    finishCalibration(ok, "tag_write_failed");
+  }
+}
+
+void Locker::showResult(bool success) {
+  resultShown_ = true;
+  resultOk_ = success;
+  resultShownAtMs_ = millis();
+  refreshDisplay();
+}
+
+bool Locker::takeResult(JsonObject event) {
+  if (result_.isNull()) {
+    return false;
+  }
+  event.set(result_.as<JsonObjectConst>());
+  result_.clear();
+  return true;
+}
+
+bool Locker::applyIndicators(const String &ledColor, bool hasNumber, int screenNumber) {
+  hasScreenCommand_ = true;
+  screenBlank_ = !hasNumber;
   screenNumber_ = screenNumber;
   refreshDisplay();
   return led_.apply(ledColor);
@@ -215,46 +437,115 @@ void Locker::setBackendOnline(bool online) {
   }
   backendOnline_ = online;
   // После обрыва связи прошлая команда могла устареть: пока бэкенд не пришлёт новую, считаем сами
-  hasScreenNumber_ = false;
+  hasScreenCommand_ = false;
   refreshDisplay();
 }
 
 void Locker::refreshDisplay() {
-  if (tareWindowsLeft_ > 0) {
+  if (resultShown_) {
+    if (resultOk_) {
+      display_.showDone();
+    } else {
+      display_.showError();
+    }
     return;
   }
-  if (!hasZero_) {
-    display_.showDashes();
+  if (scaleAction_ != ScaleAction::None) {
+    display_.showHold();
     return;
   }
-  if (backendOnline_ && hasScreenNumber_) {
-    display_.showNumber(screenNumber_);
+  switch (step_) {
+    case Step::RemoveCell:
+      display_.showPullOut();
+      return;
+    case Step::InsertFilled:
+      display_.showInsert();
+      return;
+    case Step::MeasurePieces:
+    case Step::WriteTag:
+      display_.showHold();
+      return;
+    case Step::None:
+      break;
+  }
+  if (loadCell_.failed()) {
+    display_.showError();
     return;
   }
-  if (!ready() || !nfc_.present() || pieceWeight_ <= 0) {
+  if (backendOnline_ && hasScreenCommand_) {
+    if (screenBlank_) {
+      display_.showDashes();
+    } else {
+      display_.showNumber(screenNumber_);
+    }
+    return;
+  }
+  if (!measurable() || pieceWeight() <= 0) {
     display_.showDashes();
     return;
   }
   display_.showNumber(pieces());
 }
 
-double Locker::net() const {
-  double value = loadCell_.average() - zeroOffset_;
-  return invertLoad_ ? -value : value;
+bool Locker::cellTared() const {
+  return nfc_.present() && nfc_.tagState() == NfcReader::TagState::Ready && nfc_.tag().hasTare;
 }
 
-double Locker::measuredWeight() const {
-  if (!nfc_.present() || !hasZero_ || !windowReady_) {
+bool Locker::measurable() const {
+  return !busy() && windowReady_ && settled_ && slotReady() && cellTared();
+}
+
+double Locker::pieceWeight() const {
+  if (!nfc_.present() || nfc_.tagState() != NfcReader::TagState::Ready || !nfc_.tag().hasPiece) {
     return 0;
   }
-  return std::max(0.0, net());
+  return nfc_.tag().pieceWeight;
+}
+
+double Locker::grams(double raw) const {
+  return (raw - zeroRaw_) / countsPerGram_;
+}
+
+// Может быть меньше нуля: ноль слота уплыл или тара записана с ошибкой. Не прячем это, количество не меньше 0
+double Locker::contentWeight(double raw) const {
+  return grams(raw) - nfc_.tag().tare;
 }
 
 int Locker::pieces() const {
-  if (pieceWeight_ <= 0) {
+  if (!measurable() || pieceWeight() <= 0) {
     return 0;
   }
-  return static_cast<int>(std::lround(reportedWeight_ / pieceWeight_));
+  return std::max(0, static_cast<int>(std::lround(reportedWeight_ / pieceWeight())));
+}
+
+const char *Locker::stepName() const {
+  switch (step_) {
+    case Step::RemoveCell:
+      return "remove_cell";
+    case Step::InsertFilled:
+      return "insert_filled";
+    case Step::MeasurePieces:
+    case Step::WriteTag:
+      // Запись в метку — часть замера, отдельным шагом фронту она не нужна
+      return "measure_pieces";
+    case Step::None:
+      break;
+  }
+  return "";
+}
+
+const char *Locker::actionName(ScaleAction action) {
+  switch (action) {
+    case ScaleAction::Zero:
+      return "zero";
+    case ScaleAction::Reference:
+      return "reference";
+    case ScaleAction::CellTare:
+      return "cell_tare";
+    case ScaleAction::None:
+      break;
+  }
+  return "none";
 }
 
 void Locker::fillReading(JsonObject reading) const {
@@ -262,10 +553,19 @@ void Locker::fillReading(JsonObject reading) const {
   reading["locker_id"] = id_;
   reading["nfc_flag"] = present;
   reading["nfc_id"] = present ? nfc_.uid() : String();
-  reading["weight"] = present ? std::round(reportedWeight_ * 10) / 10 : 0.0;
-  reading["piece_weight"] = present ? std::round(pieceWeight_ * 100) / 100 : 0.0;
-  reading["number_of_pieces"] = present ? pieces() : 0;
-  reading["zeroed"] = hasZero_;
+  reading["weight"] = measurable() ? std::round(reportedWeight_ * 10) / 10 : 0.0;
+  reading["piece_weight"] = std::round(pieceWeight() * 1000) / 1000;
+  reading["number_of_pieces"] = pieces();
+  reading["slot_ready"] = slotReady();
+  reading["cell_tared"] = cellTared();
+  reading["tag_error"] = present && nfc_.tagState() == NfcReader::TagState::Unsupported;
+  if (step_ == Step::None) {
+    reading["calibration"] = nullptr;
+    return;
+  }
+  JsonObject calibration = reading["calibration"].to<JsonObject>();
+  calibration["step"] = stepName();
+  calibration["num_of_pieces"] = pendingPieces_;
 }
 
 void Locker::fillHardwareInfo(JsonObject info) const {
@@ -274,18 +574,43 @@ void Locker::fillHardwareInfo(JsonObject info) const {
   info["nfc_reader"] = nfc_.chipFound();
   info["display"] = AppConfig::DISPLAY_CLK >= 0 && hardware_.displayDio >= 0;
   info["led"] = hardware_.ledRed >= 0 || hardware_.ledGreen >= 0;
-  info["zeroed"] = hasZero_;
+  info["slot_ready"] = slotReady();
   info["cell"] = nfc_.present() ? nfc_.uid() : String();
 }
 
 void Locker::printStatus() {
-  Serial.printf(
-    "[locker %u] raw %.0f (%lu samples) | net %.0f | weight %.0f | cell %s | piece %.2f | pieces %d", id_, loadCell_.average(),
-    static_cast<unsigned long>(loadCell_.lastSampleCount()), net(), reportedWeight_, nfc_.present() ? nfc_.uid().c_str() : "-", pieceWeight_,
-    pieces()
-  );
-  if (!hasZero_) {
-    Serial.print(" | no zero: send 't'");
+  double raw = loadCell_.average();
+  Serial.printf("[locker %u] raw %.0f (%lu samples, stable %u)", id_, raw, static_cast<unsigned long>(loadCell_.lastSampleCount()), stableWindows_);
+  if (slotReady()) {
+    Serial.printf(" | zero %.0f, %.2f/g | %.1f g", zeroRaw_, countsPerGram_, grams(raw));
+  } else {
+    Serial.printf(" | not set up (zero %s, scale %s)", hasZero_ ? "ok" : "-", countsPerGram_ != 0 ? "ok" : "-");
+  }
+  if (nfc_.present()) {
+    Serial.printf(" | cell %s", nfc_.uid().c_str());
+    const CellTag &tag = nfc_.tag();
+    switch (nfc_.tagState()) {
+      case NfcReader::TagState::Ready:
+        Serial.printf(" tare %s piece %s", tag.hasTare ? String(tag.tare, 1).c_str() : "-", tag.hasPiece ? String(tag.pieceWeight, 3).c_str() : "-");
+        break;
+      case NfcReader::TagState::Unsupported:
+        Serial.print(" TAG UNREADABLE");
+        break;
+      default:
+        Serial.print(" tag reading");
+        break;
+    }
+    if (measurable()) {
+      Serial.printf(" | content %.1f g | pieces %d", reportedWeight_, pieces());
+    }
+  } else {
+    Serial.print(" | no cell");
+  }
+  if (scaleAction_ != ScaleAction::None) {
+    Serial.printf(" | %s", actionName(scaleAction_));
+  }
+  if (step_ != Step::None) {
+    Serial.printf(" | calibration: %s", stepName());
   }
   Serial.printf(" | %s", nfc_.takeDiagnostics().c_str());
   if (loadCell_.failed()) {
@@ -293,9 +618,6 @@ void Locker::printStatus() {
   }
   if (!nfc_.chipFound()) {
     Serial.print(" | RC522 not found");
-  }
-  if (pendingPieces_ > 0) {
-    Serial.printf(" | calibration: %d pieces, %s", pendingPieces_, cellWasRemoved_ ? "waiting for insert" : "waiting for pull-out");
   }
   Serial.println();
 }

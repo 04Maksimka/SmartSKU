@@ -4,20 +4,29 @@
         {
             "locker_id": 0,
             "nfc_flag": true,
-            "nfc_id": "fjugdurg",
-            "weight": 100.0,
-            "piece_weight": 10.0,
+            "nfc_id": "FA603635",
+            "weight": 25.0,
+            "piece_weight": 2.5,
             "number_of_pieces": 10,
-            "zeroed": true
+            "slot_ready": true,
+            "cell_tared": true,
+            "tag_error": false,
+            "calibration": null
         },
         {
             "locker_id": 1,
-            "nfc_flag": true,
-            "nfc_id": "mfkmdjgna",
-            "weight": 150.0,
-            "piece_weight": 5.0,
-            "number_of_pieces": 30,
-            "zeroed": true
+            "nfc_flag": false,
+            "nfc_id": "",
+            "weight": 0.0,
+            "piece_weight": 0.0,
+            "number_of_pieces": 0,
+            "slot_ready": true,
+            "cell_tared": false,
+            "tag_error": false,
+            "calibration": {
+                "step": "insert_filled",
+                "num_of_pieces": 20
+            }
         }
     ]
 }

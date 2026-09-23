@@ -9,7 +9,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from smartsku_backend.config import DatabaseConfig, TelemetryConfig
 from smartsku_backend.db.database import Database
 from smartsku_backend.db.models import Box, Component, InventoryEvent, InventoryEventType, LockerState
-from smartsku_backend.messaging.contracts import BoxDataMessage, IndicatorsCommand, LockerReading
+from smartsku_backend.messaging.contracts import (
+    BoxDataMessage,
+    CalibrationProgress,
+    CalibrationStep,
+    IndicatorsCommand,
+    LockerReading,
+)
 from smartsku_backend.services.indicators import IndicatorPolicy
 from smartsku_backend.services.runtime_cache import LockerRuntimeCache
 from smartsku_backend.services.telemetry import TelemetryService
@@ -24,7 +30,7 @@ class FakePublisher:
         return True
 
 
-class TestTelemetryWithoutZero:
+class TestTelemetryAccounting:
     @pytest.fixture
     async def session(self, tmp_path: Path) -> AsyncIterator[AsyncSession]:
         database = Database(DatabaseConfig(path=tmp_path / "test.db", busy_timeout_seconds=5, echo=False))
@@ -49,7 +55,7 @@ class TestTelemetryWithoutZero:
             TelemetryConfig(weight_change_threshold=0.1),
         )
 
-    def _message(self, weight: float, zeroed: bool) -> BoxDataMessage:
+    def _message(self, weight: float, measurable: bool) -> BoxDataMessage:
         reading = LockerReading(
             locker_id=0,
             nfc_flag=True,
@@ -57,13 +63,28 @@ class TestTelemetryWithoutZero:
             weight=weight,
             piece_weight=2.5,
             number_of_pieces=0,
-            zeroed=zeroed,
+            slot_ready=True,
+            cell_tared=measurable,
         )
         return BoxDataMessage(box_id="box", lockers=[reading])
 
-    def _pulled_out(self, zeroed: bool) -> BoxDataMessage:
+    def _in_calibration(self) -> BoxDataMessage:
         reading = LockerReading(
-            locker_id=0, nfc_flag=False, nfc_id="", weight=0.0, piece_weight=0.0, number_of_pieces=0, zeroed=zeroed
+            locker_id=0,
+            nfc_flag=True,
+            nfc_id="cell",
+            weight=0.0,
+            piece_weight=2.5,
+            number_of_pieces=0,
+            slot_ready=True,
+            cell_tared=True,
+            calibration=CalibrationProgress(step=CalibrationStep.INSERT_FILLED, num_of_pieces=20),
+        )
+        return BoxDataMessage(box_id="box", lockers=[reading])
+
+    def _pulled_out(self) -> BoxDataMessage:
+        reading = LockerReading(
+            locker_id=0, nfc_flag=False, nfc_id="", weight=0.0, piece_weight=0.0, number_of_pieces=0, slot_ready=True
         )
         return BoxDataMessage(box_id="box", lockers=[reading])
 
@@ -71,37 +92,45 @@ class TestTelemetryWithoutZero:
         events = await session.scalars(select(InventoryEvent).order_by(InventoryEvent.id))
         return [(event.event_type, event.quantity_before, event.quantity_after) for event in events]
 
-    async def test_unzeroed_slot_logs_presence_but_not_quantity(self, session: AsyncSession) -> None:
+    async def test_untared_cell_logs_presence_but_not_quantity(self, session: AsyncSession) -> None:
         service = self._service(session)
-        await service.handle(self._message(weight=0.0, zeroed=False))
+        await service.handle(self._message(weight=0.0, measurable=False))
 
         state = await session.get(LockerState, ("box", 0))
         assert state is not None
-        assert (state.zeroed, state.nfc_flag, state.nfc_id, state.quantity) == (False, True, "cell", None)
+        assert (state.cell_tared, state.nfc_flag, state.nfc_id, state.quantity) == (False, True, "cell", None)
 
-        await service.handle(self._pulled_out(zeroed=False))
+        await service.handle(self._pulled_out())
         assert (state.nfc_flag, state.nfc_id) == (False, None)
         assert await self._events(session) == [
             (InventoryEventType.CELL_INSERTED, None, None),
             (InventoryEventType.CELL_REMOVED, None, None),
         ]
 
-    async def test_zero_starts_accounting_of_an_inserted_cell(self, session: AsyncSession) -> None:
+    async def test_tare_starts_accounting_of_an_inserted_cell(self, session: AsyncSession) -> None:
         service = self._service(session)
-        await service.handle(self._message(weight=0.0, zeroed=False))
-        await service.handle(self._message(weight=50.0, zeroed=True))
+        await service.handle(self._message(weight=0.0, measurable=False))
+        await service.handle(self._message(weight=50.0, measurable=True))
 
         state = await session.get(LockerState, ("box", 0))
         assert state is not None
-        assert (state.zeroed, state.quantity) == (True, 20)
+        assert (state.cell_tared, state.quantity) == (True, 20)
         assert await self._events(session) == [
             (InventoryEventType.CELL_INSERTED, None, None),
             (InventoryEventType.QUANTITY_CHANGED, None, 20),
         ]
 
-    async def test_cell_inserted_into_zeroed_slot_is_counted(self, session: AsyncSession) -> None:
+    async def test_tared_cell_inserted_into_ready_slot_is_counted(self, session: AsyncSession) -> None:
         service = self._service(session)
-        await service.handle(self._pulled_out(zeroed=True))
-        await service.handle(self._message(weight=50.0, zeroed=True))
+        await service.handle(self._pulled_out())
+        await service.handle(self._message(weight=50.0, measurable=True))
 
         assert await self._events(session) == [(InventoryEventType.CELL_INSERTED, 0, 20)]
+
+    async def test_calibration_step_is_stored_and_quantity_is_not_counted(self, session: AsyncSession) -> None:
+        service = self._service(session)
+        await service.handle(self._in_calibration())
+
+        state = await session.get(LockerState, ("box", 0))
+        assert state is not None
+        assert (state.calibration_step, state.calibration_pieces, state.quantity) == ("insert_filled", 20, None)

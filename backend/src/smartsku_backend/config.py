@@ -33,6 +33,11 @@ class TelemetryConfig(BaseModel):
     weight_change_threshold: float
 
 
+class ScaleConfig(BaseModel):
+    # How long an API request waits for the box to measure (the box itself gives up after ~5 s)
+    answer_timeout_seconds: float = 10
+
+
 class OnboardingConfig(BaseModel):
     # Broker address a box should use; it differs from mqtt.host (the backend's own view, e.g. a Docker hostname).
     # Empty host: the dashboard suggests the address it was opened with
@@ -51,6 +56,7 @@ class AppConfig(BaseModel):
     database: DatabaseConfig
     mqtt: MqttConfig
     telemetry: TelemetryConfig
+    scale: ScaleConfig = ScaleConfig()
     onboarding: OnboardingConfig
     logging: LoggingConfig
 

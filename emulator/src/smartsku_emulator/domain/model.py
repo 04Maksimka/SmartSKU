@@ -50,7 +50,7 @@ class VirtualLocker:
         self.pending_calibration: int | None = None
         self.zero_offset: float | None = None
         self.led_color = "none"
-        self.screen_number = 0
+        self.screen_number: int | None = None
 
 
 class VirtualBox:
@@ -111,7 +111,7 @@ class VirtualBox:
         self._store.record()
         return TareResult(cell_nfc_id=locker.cell.nfc_id, tare=locker.zero_offset)
 
-    def apply_indicators(self, locker_id: int, led_color: str, screen_number: int) -> None:
+    def apply_indicators(self, locker_id: int, led_color: str, screen_number: int | None) -> None:
         locker = self.locker(locker_id)
         locker.led_color = led_color
         locker.screen_number = screen_number

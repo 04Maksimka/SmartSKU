@@ -3,7 +3,13 @@ import logging
 import aiomqtt
 from pydantic import BaseModel
 
-from smartsku_backend.messaging.contracts import CalibrationCommand, IndicatorsCommand, ProvisionResponse, TareCommand
+from smartsku_backend.messaging.contracts import (
+    CalibrationCommand,
+    CancelCommand,
+    IndicatorsCommand,
+    ProvisionResponse,
+    ScaleCommand,
+)
 from smartsku_backend.messaging.topics import MqttTopics
 
 logger = logging.getLogger(__name__)
@@ -43,7 +49,10 @@ class CommandPublisher:
     async def send_calibration(self, command: CalibrationCommand) -> bool:
         return await self._connection.publish(self._topics.box_commands(command.box_id), command, self.COMMAND_QOS)
 
-    async def send_tare(self, command: TareCommand) -> bool:
+    async def send_scale(self, command: ScaleCommand) -> bool:
+        return await self._connection.publish(self._topics.box_commands(command.box_id), command, self.COMMAND_QOS)
+
+    async def send_cancel(self, command: CancelCommand) -> bool:
         return await self._connection.publish(self._topics.box_commands(command.box_id), command, self.COMMAND_QOS)
 
     async def send_indicators(self, command: IndicatorsCommand) -> bool:

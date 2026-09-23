@@ -20,7 +20,8 @@
 // Прошивка бокса по MQTT-протоколу из README:
 // 0) нет настроек сети — ждёт их по Bluetooth (режим подключения, его же включает удержание BOOT);
 // 1) нет box_id в памяти — запрашивает его у бэкенда (provisioning) по hardware_id;
-// 2) дальше шлёт box_data каждые TELEMETRY_INTERVAL_MS и выполняет команды calibration / indicators / tare.
+// 2) дальше шлёт box_data каждые TELEMETRY_INTERVAL_MS и выполняет команды scale / calibration / cancel / indicators;
+//    итоги настройки весов и калибровки уходят в топик events.
 // Светодиод платы: вспышка раз в секунду — режим подключения, часто мигает — нет связи, редко — ждём box_id,
 // горит — работаем
 class BoxApp {
@@ -45,9 +46,7 @@ private:
   void startRunning(const String &boxId);
   void requestBoxId();
   void publishTelemetry();
-  void publishTareResults();
-  void publishTareFailure(uint8_t lockerId, Locker::TareStart result);
-  void startTare(Locker &locker);
+  void publishResults();
   void printStatus();
   void updateStatusLed(bool online);
   void pollNextNfc();

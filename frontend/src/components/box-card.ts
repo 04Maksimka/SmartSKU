@@ -50,7 +50,9 @@ export class BoxCard extends LitElement {
   protected override render() {
     const { box, lockers } = this.overview;
     const since = box.status_changed_at ? ` с ${this.format.moment(box.status_changed_at)}` : "";
-    const unzeroed = lockers.filter((item) => !item.locker.zeroed).length;
+    const unready = lockers.filter(
+      ({ locker }) => !locker.slot_ready || (locker.nfc_flag && (!locker.cell_tared || locker.tag_error)),
+    ).length;
     return html`
       <section class="card">
         <header>
@@ -59,9 +61,9 @@ export class BoxCard extends LitElement {
             <div class="muted mono">box_id ${box.id}</div>
           </div>
           <div class="actions">
-            ${unzeroed
-              ? html`<span class="pill warn" title="В этих слотах не установлен ноль: учёт по ним не ведётся">
-                  ⚠ без нуля: ${unzeroed}
+            ${unready
+              ? html`<span class="pill warn" title="Слот не настроен или ячейка не взвешена пустой: учёт по ним не ведётся">
+                  ⚠ не настроено: ${unready}
                 </span>`
               : ""}
             <span class="pill ${box.online ? "good" : "bad"}" title="Статус${since}">

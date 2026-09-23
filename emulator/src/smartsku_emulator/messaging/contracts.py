@@ -51,7 +51,8 @@ class IndicatorsCommand(BaseModel):
     box_id: str
     locker_id: int
     led_color: str
-    screen_number: int
+    # None: the display shows dashes
+    screen_number: int | None
 
 
 class ProvisionRequest(BaseModel):

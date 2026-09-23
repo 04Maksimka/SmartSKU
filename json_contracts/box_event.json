@@ -1,15 +1,38 @@
 [
     {
-        "event": "tare_done",
+        "event": "scale_done",
         "box_id": "fegrr234",
         "locker_id": 0,
-        "nfc_id": "BA2C5035",
-        "tare": 212169.5
+        "action": "reference",
+        "value": -213.47
     },
     {
-        "event": "tare_failed",
+        "event": "scale_done",
         "box_id": "fegrr234",
         "locker_id": 0,
-        "reason": "no_cell"
+        "action": "cell_tare",
+        "value": 41.5,
+        "nfc_id": "BA2C5035"
+    },
+    {
+        "event": "scale_failed",
+        "box_id": "fegrr234",
+        "locker_id": 1,
+        "action": "zero",
+        "reason": "cell_present"
+    },
+    {
+        "event": "calibration_done",
+        "box_id": "fegrr234",
+        "locker_id": 1,
+        "nfc_id": "19962E8E",
+        "piece_weight": 2.476,
+        "weight": 49.5
+    },
+    {
+        "event": "calibration_failed",
+        "box_id": "fegrr234",
+        "locker_id": 1,
+        "reason": "tag_write_failed"
     }
 ]

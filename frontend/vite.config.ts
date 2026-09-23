@@ -6,10 +6,6 @@ export default defineConfig({
     port: 5173,
     proxy: {
       "/api": process.env.SMARTSKU_BACKEND_URL ?? "http://localhost:8000",
-      "/emulator-api": {
-        target: process.env.SMARTSKU_EMULATOR_URL ?? "http://localhost:8001",
-        rewrite: (path: string) => path.replace(/^\/emulator-api/, "/api"),
-      },
     },
   },
 });

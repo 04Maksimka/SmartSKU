@@ -3,6 +3,7 @@ import { LitElement, css, html, nothing } from "lit";
 import { DashboardEvents } from "../app/dashboard-events";
 import type { LockerOverview } from "../app/dashboard-store";
 import { Formatter } from "../app/formatter";
+import { CalibrationPlan } from "../app/calibration-plan";
 import { Theme } from "./theme";
 
 /** One locker of a box: which cell is inside, what it holds and how many pieces are left. */
@@ -81,13 +82,57 @@ export class LockerTile extends LitElement {
         text-align: right;
       }
 
-      .pending,
-      .no-zero {
+      .note {
         padding: 8px 10px;
         border-radius: 8px;
         font-size: 13px;
+      }
+
+      .note.warn {
         background: var(--tone-warn-bg);
         color: var(--tone-warn);
+      }
+
+      .note.info {
+        background: var(--tone-info-bg);
+        color: var(--tone-info);
+      }
+
+      .note .link {
+        padding: 0;
+        border: 0;
+        background: none;
+        color: inherit;
+        font: inherit;
+        font-weight: 650;
+        text-decoration: underline;
+        cursor: pointer;
+      }
+
+      .note.bad {
+        background: var(--tone-bad-bg);
+        color: var(--tone-bad);
+      }
+
+      .procedure {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        padding: 8px 10px;
+        border-radius: 8px;
+        border-left: 3px solid var(--accent);
+        background: var(--accent-soft);
+        font-size: 13px;
+      }
+
+      .procedure strong {
+        font-size: 14px;
+      }
+
+      .actions {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
       }
 
       .footer {
@@ -109,41 +154,79 @@ export class LockerTile extends LitElement {
   private signature = "";
 
   protected override render() {
-    const { locker, pendingCalibration } = this.overview;
-    if (!locker.zeroed) {
-      return this.renderWithoutZero();
-    }
+    const { locker } = this.overview;
     return html`
       <div class="tile ${locker.nfc_flag ? "" : "out"}">
         <div class="head">
           <span class="slot">Слот ${this.format.slot(locker.locker_id)}</span>
           ${this.renderPresence()}
         </div>
-        ${pendingCalibration
-          ? html`<div class="pending">
-              Ждёт калибровки: «${pendingCalibration.name}», ${pendingCalibration.num_of_pieces} шт.<br />
-              Извлеките ячейку, насыпьте компоненты и вставьте обратно.
-            </div>`
-          : nothing}
+        ${locker.calibration ? this.renderCalibration() : this.renderSetupNote()}
         ${locker.nfc_flag ? this.renderInserted() : this.renderPulledOut()}
         <div class="footer">
           <span class="muted">обновлено ${this.format.time(locker.updated_at)}</span>
-          ${this.renderAction()}
+          <span class="actions">${this.renderActions()}</span>
         </div>
       </div>
     `;
   }
 
-  private renderAction() {
+  /** The step the box waits for, so the person at the rack knows what to do without opening the dialog. */
+  private renderCalibration() {
+    const { locker, pendingCalibration } = this.overview;
+    const progress = locker.calibration;
+    if (progress === null) {
+      return nothing;
+    }
+    const plan = new CalibrationPlan(progress.num_of_pieces, pendingCalibration?.name ?? "");
+    const label = `Калибровка${pendingCalibration ? ` «${pendingCalibration.name}»` : ""}`;
+    return html`<div class="procedure">
+      <div class="muted">${label} · шаг ${plan.position(progress.step)} из ${plan.length}</div>
+      <strong>${plan.title(progress.step)}</strong>
+    </div>`;
+  }
+
+  /** What the slot or the cell still lacks before the weight turns into a count. */
+  private renderSetupNote() {
+    const { locker, pendingCalibration } = this.overview;
+    if (pendingCalibration) {
+      return html`<div class="note warn">
+        Калибровка «${pendingCalibration.name}» ждёт ответа бокса. Если он не в сети, отмените её.
+      </div>`;
+    }
+    if (locker.nfc_flag && locker.tag_error) {
+      return html`<div class="note bad">NFC-метка ячейки не читается: замените метку.</div>`;
+    }
+    if (!locker.slot_ready) {
+      return html`<div class="note info">
+        Тензодатчик слота не настроен, вес не считается.
+        <button class="link" @click=${() => this.events.scaleSetup(this, this.overview)}>Настроить гирей</button>
+      </div>`;
+    }
+    if (locker.nfc_flag && !locker.cell_tared) {
+      return html`<div class="note warn">
+        Новая ячейка: в её метке нет веса пустой ячейки, вес и количество не считаются.
+        <button class="link" @click=${() => this.events.scaleSetup(this, this.overview)}>Взвесить пустой</button>
+      </div>`;
+    }
+    return nothing;
+  }
+
+  private renderActions() {
     const { locker, pendingCalibration } = this.overview;
     const component = locker.component;
     if (pendingCalibration) {
-      return html`<button
-        @click=${() =>
-          this.events.cancelCalibration(this, { id: pendingCalibration.id, label: pendingCalibration.name })}
-      >
-        Отменить
-      </button>`;
+      return html`
+        ${locker.calibration
+          ? html`<button @click=${() => this.events.showCalibration(this, pendingCalibration)}>Шаги</button>`
+          : nothing}
+        <button
+          @click=${() =>
+            this.events.cancelCalibration(this, { id: pendingCalibration.id, label: pendingCalibration.name })}
+        >
+          Отменить
+        </button>
+      `;
     }
     if (component) {
       return html`<button
@@ -158,66 +241,35 @@ export class LockerTile extends LitElement {
         Освободить
       </button>`;
     }
-    return html`
-      ${locker.nfc_flag ? this.renderTareButton("") : nothing}
-      <button class="primary" @click=${() => this.events.calibrate(this, this.overview)}>Откалибровать</button>
-    `;
+    if (!locker.nfc_flag || !locker.slot_ready || !locker.cell_tared) {
+      return nothing;
+    }
+    return html`<button
+      class="primary"
+      title="Указать компонент и посчитать вес штуки"
+      @click=${() => this.events.calibrate(this, this.overview)}
+    >
+      Откалибровать
+    </button>`;
   }
 
-  /** Until the zero is set the weight is meaningless: no accounting and no calibration, only the tare action. */
-  private renderWithoutZero() {
-    const { locker } = this.overview;
-    return html`
-      <div class="tile ${locker.nfc_flag ? "" : "out"}">
-        <div class="head">
-          <span class="slot">Слот ${this.format.slot(locker.locker_id)}</span>
-          ${this.renderPresence()}
-        </div>
-        <div class="no-zero">
-          ⚠ Ноль не установлен, вес и количество не считаются.
-          ${locker.nfc_flag
-            ? "Уберите всё из ячейки и нажмите «Установить ноль»."
-            : "Вставьте пустую ячейку, затем установите ноль."}
-        </div>
-        ${locker.nfc_flag
-          ? html`<div class="name ${locker.component ? "" : "muted"}">
-                ${locker.component?.name ?? "Не откалибрована"}
-              </div>
-              <dl>
-                <dt>Ячейка</dt>
-                <dd class="mono">${locker.nfc_id}</dd>
-              </dl>`
-          : this.renderPulledOut()}
-        <div class="footer">
-          <span class="muted">обновлено ${this.format.time(locker.updated_at)}</span>
-          ${this.renderTareButton("primary")}
-        </div>
-      </div>
-    `;
-  }
-
-  /** Presence comes from the NFC tag alone: it does not need a zero or a calibration. */
+  /** Presence comes from the NFC tag alone: it does not need the load cell setup or a calibration. */
   private renderPresence() {
     return this.overview.locker.nfc_flag
       ? html`<span class="pill good">● на месте</span>`
       : html`<span class="pill warn">○ извлечена</span>`;
   }
 
-  private renderTareButton(variant: string) {
-    const { locker, boxName } = this.overview;
-    return html`<button
-      class=${variant}
-      ?disabled=${!locker.nfc_flag}
-      title=${locker.nfc_flag ? "Запомнить вес пустой ячейки как ноль" : "Сначала вставьте пустую ячейку"}
-      @click=${() => this.events.tare(this, { boxId: locker.box_id, lockerId: locker.locker_id, boxName })}
-    >
-      Установить ноль
-    </button>`;
-  }
-
   protected override updated(): void {
     const { locker, pendingCalibration } = this.overview;
-    const signature = [locker.nfc_flag, locker.nfc_id, locker.quantity, locker.component?.name, pendingCalibration?.id]
+    const signature = [
+      locker.nfc_flag,
+      locker.nfc_id,
+      locker.quantity,
+      locker.component?.name,
+      pendingCalibration?.id,
+      locker.calibration?.step,
+    ]
       .map(String)
       .join("|");
     if (this.signature && signature !== this.signature) {
@@ -234,12 +286,13 @@ export class LockerTile extends LitElement {
   private renderInserted() {
     const { locker } = this.overview;
     const component = locker.component;
+    const weight = locker.cell_tared && locker.slot_ready ? this.format.weight(locker.weight) : "—";
     if (component === null) {
       return html`
         <div class="name muted">Не откалибрована</div>
         <dl>
-          <dt>Вес</dt>
-          <dd>${this.format.weight(locker.weight)}</dd>
+          <dt>Содержимое</dt>
+          <dd>${weight}</dd>
           <dt>Ячейка</dt>
           <dd class="mono">${locker.nfc_id}</dd>
         </dl>
@@ -252,8 +305,8 @@ export class LockerTile extends LitElement {
         : nothing}
       <div class="quantity"><strong>${locker.quantity ?? "—"}</strong><span class="muted">шт</span></div>
       <dl>
-        <dt>Вес</dt>
-        <dd>${this.format.weight(locker.weight)}</dd>
+        <dt>Содержимое</dt>
+        <dd>${weight}</dd>
         <dt>1 штука</dt>
         <dd>${this.format.pieceWeight(component.piece_weight)}</dd>
         <dt>Ячейка</dt>

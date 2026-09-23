@@ -4,9 +4,8 @@
 
 // Железо одной умной ячейки. Общие для всех ячеек линии (SCK HX711, CLK дисплеев, RST и SPI считывателей) —
 // в AppConfig. Пин -1 — компонент не подключён
+// Направление тензодатчика (растут показания при нагрузке или падают) бокс узнаёт при настройке гирей, см. Locker
 struct LockerHardware {
-  // true, если при нагрузке сырые показания HX711 уменьшаются (перепутаны провода A+/A-)
-  bool invertLoad;
   int8_t hxDout;
   int8_t displayDio;
   int8_t rfidSs;
@@ -17,7 +16,7 @@ struct LockerHardware {
 // Настройки прошивки. Сеть и адрес брокера задаются с фронта по Bluetooth и хранятся в NVS (см. NetworkSettings)
 struct AppConfig {
   // Показывается на фронте при подключении бокса
-  static constexpr const char *FIRMWARE_VERSION = "0.5.0";
+  static constexpr const char *FIRMWARE_VERSION = "0.7.0";
   static constexpr unsigned long SERIAL_BAUD = 115200;
   // Встроенный светодиод платы: мигает, пока нет связи с брокером; горит, когда бокс работает
   static constexpr int STATUS_LED_PIN = 2;
@@ -81,6 +80,13 @@ struct AppConfig {
   static constexpr uint8_t RFID_MISSES_TO_REMOVE = 3;
   // Столько опросов подряд с ошибкой связи (не таймаутом) — и считыватель инициализируется заново (~10 с)
   static constexpr uint8_t RFID_ERRORS_TO_REINIT = 50;
+  // Данные ячейки (CellTag) в метке: MIFARE Classic — блок 4 (первый блок сектора 1, ключ A по умолчанию FF..FF),
+  // Ultralight/NTAG — страницы 4-7
+  static constexpr uint8_t TAG_CLASSIC_BLOCK = 4;
+  static constexpr uint8_t TAG_ULTRALIGHT_PAGE = 4;
+  // Столько неудачных опросов подряд — и метка считается нечитаемой / запись неудавшейся
+  static constexpr uint8_t TAG_READ_ATTEMPTS = 5;
+  static constexpr uint8_t TAG_WRITE_ATTEMPTS = 10;
 
   // Общий CLK у всех TM1637; у каждого дисплея свой DIO
   static constexpr int8_t DISPLAY_CLK = 33;
@@ -98,22 +104,32 @@ struct AppConfig {
   // Столько пустых окон подряд — и HX711 считается отвалившимся (одно пустое окно бывает, когда цикл
   // блокируется, например при сканировании Wi-Fi на старте)
   static constexpr uint8_t HX711_MAX_EMPTY_WINDOWS = 3;
-  // Ноль усредняется по нескольким окнам: он хранится долго, и ошибка в нём сдвигает все показания
-  static constexpr uint8_t TARE_WINDOWS = 4;
 
-  // Вес — в условных единицах: сырые отсчёты HX711 за вычетом нуля (пустой ячейки). Перевод в граммы не нужен:
-  // количество = вес / вес штуки, а вес штуки меряется тем же датчиком.
-  // Пороги ниже — тоже в отсчётах; подобрать по шуму конкретного датчика (команда v, колонка net)
+  // Вес — в граммах: вес содержимого = (показание - ноль) / масштаб - тара ячейки, где
+  //   ноль и масштаб (отсчётов HX711 на грамм, знак — направление датчика) задаёт настройка весов эталонной гирей,
+  //   хранятся в NVS слота;
+  //   тара — вес пустой ячейки, записан в её NFC-метку.
+  // Пороги *_UNITS — в сырых отсчётах (работают и до настройки); подобрать по шуму конкретного датчика (команда v).
   //
-  // Шум: окна, которые отличаются от отправленного веса меньше чем на NOISE_UNITS, не меняют weight в box_data
-  // (если при этом не изменилось число штук)
+  // Шум: окна, которые отличаются друг от друга меньше чем на NOISE_UNITS, считаются стабильными
   static constexpr double NOISE_UNITS = 400;
-  // Калибровка штуки не принимает ячейку легче этого — считается, что её вставили пустой
-  static constexpr double EMPTY_UNITS = 1000;
-  // После вставки ячейки вес «плывёт»: ячейка не попадает в телеметрию (и не калибруется), пока не будет
-  // столько окон подряд с разбросом меньше NOISE_UNITS, но не дольше SETTLE_TIMEOUT_MS
+  // Эталонная гиря должна сдвинуть показания хотя бы на столько
+  static constexpr double MIN_LOAD_UNITS = 1000;
+  // Пустая ячейка и калибровочная порция должны весить больше
+  static constexpr double MIN_LOAD_GRAMS = 1.0;
+  // Отправляемый вес меняется при сдвиге не меньше этого (или половины веса штуки, если она легче)
+  static constexpr double REPORT_STEP_GRAMS = 0.5;
+  // Гиря для настройки из Serial Monitor (команда w); с фронта вес гири приходит в команде
+  static constexpr double REFERENCE_GRAMS = 100;
+  // Замер считается готовым после стольких стабильных окон подряд (~1.5 с)
   static constexpr uint8_t STABLE_WINDOWS = 3;
+  // Замер усредняется по последним окнам стабильной серии, не больше этого числа
+  static constexpr uint8_t STABLE_AVERAGE_WINDOWS = 8;
+  // После вставки вес «плывёт»: ячейка не попадает в телеметрию, пока вес не станет стабильным, но не дольше этого.
+  // Замер настройки весов, не дождавшийся стабильного веса за это время, завершается ошибкой unstable
   static constexpr unsigned long SETTLE_TIMEOUT_MS = 5000;
+  // Сколько дисплей показывает итог настройки весов/калибровки ("donE" или " Err")
+  static constexpr unsigned long RESULT_SHOW_MS = 2500;
 
   static constexpr uint8_t DISPLAY_BRIGHTNESS = 3;
 
@@ -124,9 +140,9 @@ struct AppConfig {
   // Светодиоды висят на расширителе PCF8575 (I2C: SDA 4, SCL 15, адрес 0x20) и пока не используются:
   // после включения его выходы в HIGH, светодиоды с общим анодом не горят
   static constexpr LockerHardware LOCKERS[LOCKER_COUNT] = {
-    {.invertLoad = false, .hxDout = 36, .displayDio = 25, .rfidSs = 19, .ledRed = -1, .ledGreen = -1},
-    {.invertLoad = false, .hxDout = 39, .displayDio = 26, .rfidSs = 18, .ledRed = -1, .ledGreen = -1},
-    {.invertLoad = false, .hxDout = 34, .displayDio = 27, .rfidSs = 5, .ledRed = -1, .ledGreen = -1},
-    {.invertLoad = false, .hxDout = 35, .displayDio = 14, .rfidSs = 17, .ledRed = -1, .ledGreen = -1},
+    {.hxDout = 36, .displayDio = 25, .rfidSs = 19, .ledRed = -1, .ledGreen = -1},
+    {.hxDout = 39, .displayDio = 26, .rfidSs = 18, .ledRed = -1, .ledGreen = -1},
+    {.hxDout = 34, .displayDio = 27, .rfidSs = 5, .ledRed = -1, .ledGreen = -1},
+    {.hxDout = 35, .displayDio = 14, .rfidSs = 17, .ledRed = -1, .ledGreen = -1},
   };
 };

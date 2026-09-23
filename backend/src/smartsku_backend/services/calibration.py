@@ -4,7 +4,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from smartsku_backend.db.models import Box, Calibration, CalibrationStatus, Component, LockerState
-from smartsku_backend.messaging.contracts import CalibrationCommand
+from smartsku_backend.messaging.contracts import CalibrationCommand, CancelCommand
 from smartsku_backend.messaging.publisher import CommandPublisher
 from smartsku_backend.services.errors import ConflictError, NotFoundError
 
@@ -37,8 +37,14 @@ class CalibrationService:
         state = await self._session.get(LockerState, (box_id, locker_id))
         if state is None:
             raise NotFoundError(f"Locker {locker_id} of box {box_id} has not reported yet")
-        if not state.zeroed:
-            raise ConflictError(f"Locker {locker_id} of box {box_id} has no zero, set it before calibration")
+        if not state.slot_ready:
+            raise ConflictError(f"Locker {locker_id} of box {box_id} is not set up, run the load cell setup first")
+        if not state.nfc_flag:
+            raise ConflictError(f"Insert the cell into locker {locker_id} of box {box_id} before calibration")
+        if state.tag_error:
+            raise ConflictError(f"The NFC tag of the cell in locker {locker_id} of box {box_id} cannot be read")
+        if not state.cell_tared:
+            raise ConflictError(f"The cell in locker {locker_id} of box {box_id} has no tare, weigh it empty first")
         if state.nfc_id and await self._session.get(Component, state.nfc_id) is not None:
             raise ConflictError(f"Locker {locker_id} of box {box_id} holds a calibrated cell, release it first")
 
@@ -71,11 +77,7 @@ class CalibrationService:
         return calibration
 
     async def cancel(self, calibration_id: int) -> Calibration:
-        """Drop a request the user no longer wants.
-
-        The box keeps waiting for a cell until it gets another calibration command, so the operator simply
-        leaves the cell alone; the backend will not turn the next insertion into a component.
-        """
+        """Drop a request the user no longer wants and stop the box walking through it."""
         calibration = await self._session.get(Calibration, calibration_id)
         if calibration is None:
             raise NotFoundError(f"Calibration {calibration_id} not found")
@@ -83,6 +85,10 @@ class CalibrationService:
             raise ConflictError(f"Calibration {calibration_id} is already {calibration.status.value}")
         calibration.status = CalibrationStatus.CANCELLED
         await self._session.commit()
+        box = await self._session.get(Box, calibration.box_id)
+        if box is not None and box.online:
+            # Best effort: an offline box gets a new command before it can finish anything
+            await self._publisher.send_cancel(CancelCommand(box_id=calibration.box_id, locker_id=calibration.locker_id))
         logger.info("Calibration %s cancelled", calibration_id)
         return calibration
 
