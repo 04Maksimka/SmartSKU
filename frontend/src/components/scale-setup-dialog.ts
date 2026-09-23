@@ -17,7 +17,7 @@ interface SlotResult {
  * Load cell setup, a rare service operation: when a box is new, when readings drift, or for a new cell.
  *   1. zero      — cells pulled out: the box remembers the empty load cells;
  *   2. reference — the reference weight on each slot in turn: counts per gram and the load cell direction;
- *   3. cells     — empty cells inserted: their weight goes to their NFC tags.
+ *   3. cells     — each new cell inserted empty and weighed with its own button: the weight goes to its NFC tag.
  * Every step can be skipped when the slot already has it, e.g. drift needs only a new zero. Each measurement is one
  * request that waits for the box's answer (a few seconds).
  */
@@ -29,7 +29,6 @@ export class ScaleSetupDialog extends LitElement {
     stage: { state: true },
     boxId: { state: true },
     picked: { state: true },
-    weigh: { state: true },
     results: { state: true },
   };
 
@@ -89,6 +88,35 @@ export class ScaleSetupDialog extends LitElement {
         gap: 6px;
       }
 
+      .row .cell-state {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 6px 10px;
+      }
+
+      .row button.small {
+        padding: 4px 9px;
+        font-size: 12px;
+      }
+
+      /* Phones: the measurement result goes under the slot's state instead of a third column */
+      @media (max-width: 480px) {
+        .row {
+          grid-template-columns: 56px 1fr;
+          row-gap: 0;
+        }
+
+        .row > span:last-child {
+          grid-column: 2;
+        }
+
+        .row > span:last-child > * {
+          display: inline-block;
+          margin-top: 4px;
+        }
+      }
+
       .ok {
         color: var(--tone-good);
       }
@@ -118,8 +146,6 @@ export class ScaleSetupDialog extends LitElement {
   declare stage: Stage;
   declare boxId: string | null;
   declare picked: number[];
-  /** Cells to weigh on the "cells" step; a locker missing here follows its default (a cell without a tare). */
-  declare weigh: Map<number, boolean>;
   declare results: Map<string, SlotResult>;
 
   private readonly format = new Formatter();
@@ -131,13 +157,11 @@ export class ScaleSetupDialog extends LitElement {
     this.stage = "select";
     this.boxId = null;
     this.picked = [];
-    this.weigh = new Map();
     this.results = new Map();
   }
 
   /** From a tile: that slot only, starting with what it lacks. Otherwise the slot list of the first box. */
   open(preselected: LockerOverview | null): void {
-    this.weigh = new Map();
     this.results = new Map();
     if (preselected) {
       this.boxId = preselected.locker.box_id;
@@ -173,8 +197,8 @@ export class ScaleSetupDialog extends LitElement {
       <h2>Настройка весов</h2>
       <p class="muted">
         Нужна для нового бокса, когда показания уплыли, и для новых ячеек. Три шага: ноль пустых датчиков, гиря
-        ${this.referenceGrams} г на каждый слот, вес пустых ячеек в их метки. Шаг можно пропустить, если слот его уже
-        прошёл: при дрейфе хватит нового нуля, ячейки с деталями взвешивать не нужно.
+        ${this.referenceGrams} г на каждый слот, взвешивание новых пустых ячеек. Шаг можно пропустить, если слот его
+        уже прошёл: при дрейфе хватит нового нуля.
       </p>
       ${
         this.boxes.length > 1
@@ -281,39 +305,72 @@ export class ScaleSetupDialog extends LitElement {
   }
 
   private renderCells() {
-    const toWeigh = this.pickedLockers().filter((item) => this.weighs(item));
+    const lockers = this.pickedLockers();
+    const fresh = lockers.filter((item) => this.isNewCell(item) && !this.weighed(item));
     return html`
-      <h2>Шаг 3 из 3 · Ячейки</h2>
+      <h2>Шаг 3 из 3 · Новые ячейки</h2>
       <p>
-        Уберите гирю и вставьте ячейки. Новые ячейки должны быть пустыми: бокс взвесит их и запишет вес в NFC-метку,
-        дальше ячейку можно ставить в любой слот. Ячейки с деталями не взвешивайте — свой вес они уже знают.
+        Чтобы считать детали, боксу нужен вес пустой ячейки. Уберите гирю, вставьте каждую <b>новую</b> ячейку
+        <b>пустой</b> и нажмите «Взвесить пустую». Вес сохранится в самой ячейке — дальше её можно ставить в любой
+        слот и насыпать детали.
       </p>
       ${this.renderRows(
-        (item) =>
-          item.locker.nfc_flag
-            ? html`<label>
-                <input
-                  type="checkbox"
-                  .checked=${this.weighs(item)}
-                  @change=${(event: Event) =>
-                    this.setWeigh(item.locker.locker_id, (event.target as HTMLInputElement).checked)}
-                />
-                ${item.locker.cell_tared ? "вес в метке есть" : html`<span class="error">новая ячейка</span>`}
-              </label>`
-            : html`<span class="muted">нет ячейки</span>`,
+        (item) => this.renderCellState(item),
         (item) => this.renderResult("cells", item),
       )}
       <div class="actions">
         <button @click=${() => (this.stage = "reference")}>Назад</button>
-        <button
-          ?disabled=${!toWeigh.length || this.busy()}
-          @click=${() => void this.measureAll("cells", toWeigh, null)}
-        >
-          Взвесить отмеченные
-        </button>
+        ${fresh.length > 1
+          ? html`<button ?disabled=${this.busy()} @click=${() => void this.measureAll("cells", fresh, null)}>
+              Взвесить все новые (${fresh.length})
+            </button>`
+          : nothing}
         <button class="primary" ?disabled=${this.busy()} @click=${() => this.close()}>Готово</button>
       </div>
     `;
+  }
+
+  /** What to do with the cell in this slot, in the words of the person standing at the box. */
+  private renderCellState(item: LockerOverview) {
+    const { locker } = item;
+    if (!locker.nfc_flag) {
+      return html`<span class="muted">вставьте пустую ячейку</span>`;
+    }
+    if (locker.component) {
+      return html`<span class="muted">с деталями — взвешивать не нужно</span>`;
+    }
+    const result = this.results.get(this.key("cells", locker.locker_id));
+    if (result?.state === "busy") {
+      return nothing;
+    }
+    if (this.isNewCell(item) && result?.state !== "ok") {
+      return html`<button class="primary small" ?disabled=${this.busy()} @click=${() => void this.measure("cells", item, null)}>
+        Взвесить пустую
+      </button>`;
+    }
+    if (result?.state === "ok") {
+      return nothing;
+    }
+    return html`<span class="cell-state">
+      <span class="ok">✓ уже взвешена</span>
+      <button
+        class="small"
+        title="Если ячейку заменили: вставьте её пустой и взвесьте заново"
+        ?disabled=${this.busy()}
+        @click=${() => void this.measure("cells", item, null)}
+      >
+        Заново
+      </button>
+    </span>`;
+  }
+
+  /** The inserted cell does not know its empty weight yet, so the box cannot count its pieces. */
+  private isNewCell(item: LockerOverview): boolean {
+    return item.locker.nfc_flag && !item.locker.cell_tared && item.locker.component === null;
+  }
+
+  private weighed(item: LockerOverview): boolean {
+    return this.results.get(this.key("cells", item.locker.locker_id))?.state === "ok";
   }
 
   private renderRows(
@@ -363,11 +420,8 @@ export class ScaleSetupDialog extends LitElement {
           ? "ноль запомнен"
           : action === "reference"
             ? `1 г = ${Math.abs(result.value).toLocaleString("ru-RU", { maximumFractionDigits: 1 })} отсчётов`
-            : `ячейка весит ${this.format.weight(result.value)}`;
+            : `пустая весит ${this.format.weight(result.value)}`;
       this.setResult(stage, lockerId, { state: "ok", text });
-      if (stage === "cells") {
-        this.setWeigh(lockerId, false);
-      }
       return true;
     } catch (error) {
       this.setResult(stage, lockerId, {
@@ -387,14 +441,6 @@ export class ScaleSetupDialog extends LitElement {
 
   private busy(): boolean {
     return [...this.results.values()].some((result) => result.state === "busy");
-  }
-
-  private weighs(item: LockerOverview): boolean {
-    return item.locker.nfc_flag && (this.weigh.get(item.locker.locker_id) ?? !item.locker.cell_tared);
-  }
-
-  private setWeigh(lockerId: number, value: boolean): void {
-    this.weigh = new Map(this.weigh).set(lockerId, value);
   }
 
   private setResult(stage: Stage, lockerId: number, result: SlotResult): void {

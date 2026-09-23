@@ -387,8 +387,8 @@ export class LockerTile extends LitElement {
     }
     if (locker.nfc_flag && !locker.cell_tared) {
       return html`<div class="note warn">
-        Новая ячейка: в её метке нет веса пустой ячейки, вес и количество не считаются.
-        <button class="link" @click=${() => this.events.scaleSetup(this, this.overview)}>Взвесить пустой</button>
+        Новая ячейка: взвесьте её пустой, иначе детали не посчитать.
+        <button class="link" @click=${() => this.events.scaleSetup(this, this.overview)}>Взвесить пустую</button>
       </div>`;
     }
     return nothing;
