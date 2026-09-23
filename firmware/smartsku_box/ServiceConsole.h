@@ -4,7 +4,7 @@
 
 // Сервисная команда из Serial Monitor (наладка на месте, бэкенду не нужна)
 struct ConsoleCommand {
-  enum class Type { None, Zero, Reference, CellTare, Cancel, Status, Verbose, ForgetBoxId, Reset, Setup, Help, Invalid };
+  enum class Type { None, Zero, Reference, CellTare, EraseTag, Cancel, Status, Verbose, ForgetBoxId, Reset, Setup, Help, Invalid };
 
   Type type = Type::None;
   uint8_t lockerId = 0;
@@ -16,6 +16,7 @@ struct ConsoleCommand {
 //   z [locker]           — ноль пустого слота (ячейка вынута)
 //   w [locker] [граммы]  — масштаб по гире на пустом слоте (по умолчанию REFERENCE_GRAMS)
 //   c [locker]           — взвесить вставленную пустую ячейку и записать тару в её метку
+//   e [locker]           — стереть данные ячейки (тару и вес штуки) в метке вставленной ячейки
 //   x [locker]           — остановить калибровку
 //   s                    — состояние бокса и ячеек
 //   v                    — вкл/выкл строку показаний раз в секунду

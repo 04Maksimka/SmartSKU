@@ -305,6 +305,9 @@ void BoxApp::handleConsole(const ConsoleCommand &command) {
     case ConsoleCommand::Type::CellTare:
       lockers_[command.lockerId]->startScale(Locker::ScaleAction::CellTare, 0);
       break;
+    case ConsoleCommand::Type::EraseTag:
+      lockers_[command.lockerId]->eraseTag();
+      break;
     case ConsoleCommand::Type::Cancel:
       lockers_[command.lockerId]->cancelCalibration();
       break;

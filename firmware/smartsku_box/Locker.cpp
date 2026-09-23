@@ -384,9 +384,23 @@ void Locker::finishCalibration(bool success, const char *reason) {
   showResult(success);
 }
 
+void Locker::eraseTag() {
+  if (busy() || erasingTag_) {
+    Serial.printf("[locker %u] busy, tag erase refused\n", id_);
+  } else if (!nfc_.present()) {
+    Serial.printf("[locker %u] no cell, nothing to erase\n", id_);
+  } else {
+    nfc_.requestWrite(CellTag());
+    erasingTag_ = true;
+  }
+}
+
 void Locker::onTagWritten(NfcReader::WriteResult result) {
   bool ok = result == NfcReader::WriteResult::Done;
-  if (scaleAction_ == ScaleAction::CellTare && scaleWriting_) {
+  if (erasingTag_) {
+    erasingTag_ = false;
+    Serial.printf("[locker %u] tag erase %s\n", id_, ok ? "done" : "failed");
+  } else if (scaleAction_ == ScaleAction::CellTare && scaleWriting_) {
     finishScale(ok, "tag_write_failed", measuredTare_);
   } else if (step_ == Step::WriteTag) {
     finishCalibration(ok, "tag_write_failed");

@@ -55,6 +55,8 @@ public:
   void startCalibration(int numOfPieces);
   // Останавливает калибровку без события
   void cancelCalibration();
+  // Сервисная: метка вставленной ячейки становится чистой
+  void eraseTag();
   bool applyIndicators(const String &ledColor, bool hasNumber, int screenNumber);
   // Нет связи с бэкендом — дисплей показывает количество, посчитанное самим боксом
   void setBackendOnline(bool online);
@@ -137,6 +139,7 @@ private:
   unsigned long scaleStartedMs_ = 0;
   bool scaleWriting_ = false;
   double measuredTare_ = 0;
+  bool erasingTag_ = false;
 
   Step step_ = Step::None;
   int pendingPieces_ = 0;

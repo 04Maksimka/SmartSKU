@@ -73,6 +73,8 @@ ConsoleCommand ServiceConsole::parse(String line) {
     command.type = parseReference(args, command) ? ConsoleCommand::Type::Reference : ConsoleCommand::Type::Invalid;
   } else if (name == "c") {
     command.type = parseLocker(args, command.lockerId) ? ConsoleCommand::Type::CellTare : ConsoleCommand::Type::Invalid;
+  } else if (name == "e") {
+    command.type = parseLocker(args, command.lockerId) ? ConsoleCommand::Type::EraseTag : ConsoleCommand::Type::Invalid;
   } else if (name == "x") {
     command.type = parseLocker(args, command.lockerId) ? ConsoleCommand::Type::Cancel : ConsoleCommand::Type::Invalid;
   } else {
@@ -116,6 +118,7 @@ void ServiceConsole::printHelp() {
   Serial.println("  z [locker]          zero the load cell: the cell is pulled out, nothing on the slot");
   Serial.println("  w [locker] [grams]  scale by the reference weight on the zeroed empty slot (default 100 g)");
   Serial.println("  c [locker]          weigh the inserted EMPTY cell and write its tare to the tag");
+  Serial.println("  e [locker]          erase the cell data (tare and piece weight) in the inserted cell tag");
   Serial.println("  x [locker]          cancel calibration");
   Serial.println("  s                   status");
   Serial.println("  v                   toggle readings every second");
