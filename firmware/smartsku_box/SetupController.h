@@ -13,8 +13,10 @@
 #include "WifiConnection.h"
 
 // Режим подключения бокса с фронта по Bluetooth. Протокол (JSON-строки, README → «Подключение бокса»):
-//   фронт → бокс: {"op":"info"} | {"op":"scan"} | {"op":"connect","ssid","username","password","host","port"}
+//   фронт → бокс: {"op":"info"} | {"op":"scan"} | {"op":"connect","ssid","username","password","host","port",
+//                  "tls","mqtt_username","mqtt_password"} — username/password здесь для WPA2 Enterprise
 //   бокс → фронт: {"type":"info",...} | {"type":"networks","items":[...]} | {"type":"status","state":...}
+//                 (с TLS после Wi-Fi — state "handover": бокс выключает Bluetooth и дальше фронт следит через сервер)
 //                 | {"type":"error","message":...}
 // Новые настройки BoxApp забирает через takeSettings() и сам применяет их
 class SetupController {
@@ -57,4 +59,7 @@ private:
   bool tracking_ = false;
   String lastProgress_;
   unsigned long registeredAtMs_ = 0;
+  // Облако (TLS): после Wi-Fi Bluetooth выключается, handoverAtMs_ — когда фронту сообщили об этом
+  bool handover_ = false;
+  unsigned long handoverAtMs_ = 0;
 };

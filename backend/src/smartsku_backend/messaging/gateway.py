@@ -42,6 +42,8 @@ class MqttGateway:
                     port=self._config.port,
                     identifier=self._config.client_id,
                     keepalive=self._config.keepalive_seconds,
+                    username=self._config.username or None,
+                    password=self._config.password or None,
                 ) as client:
                     self._connection.attach(client)
                     await self._subscribe(client)

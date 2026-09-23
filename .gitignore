@@ -17,3 +17,4 @@ firmware/**/build/
 
 # Deployment secrets (VPS)
 .env
+/secrets/

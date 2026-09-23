@@ -25,6 +25,9 @@ class BoxClaimRequest(BaseModel):
 class OnboardingSettingsSchema(BaseModel):
     broker_host: str
     broker_port: int
+    broker_tls: bool
+    broker_username: str
+    broker_password: str
 
 
 class ComponentSchema(OrmSchema):

@@ -12,6 +12,11 @@ struct NetworkSettings {
   // IP или имя компьютера с брокером; имя вида host.local ищется через mDNS
   String mqttHost;
   uint16_t mqttPort = 0;
+  // Облачный брокер: TLS (сертификат проверяется по корням из TrustedRoots.h) и учётка бокса.
+  // Локальный брокер — без TLS и без логина
+  bool mqttTls = false;
+  String mqttUsername;
+  String mqttPassword;
 
   bool configured() const {
     return !ssid.isEmpty() && !mqttHost.isEmpty() && mqttPort > 0;

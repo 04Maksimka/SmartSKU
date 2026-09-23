@@ -20,6 +20,8 @@ void SetupController::open() {
   lastActivityMs_ = millis();
   tracking_ = false;
   registeredAtMs_ = 0;
+  handover_ = false;
+  handoverAtMs_ = 0;
 }
 
 void SetupController::close() {
@@ -55,7 +57,10 @@ void SetupController::update(const NetworkSettings &current, const String &boxId
     reportProgress(boxId);
   }
 
-  if (registeredAtMs_ != 0 && now - registeredAtMs_ >= AppConfig::SETUP_LINGER_MS) {
+  if (handoverAtMs_ != 0 && now - handoverAtMs_ >= AppConfig::SETUP_HANDOVER_MS) {
+    Serial.println("[ble] handing over to the cloud server: Bluetooth off");
+    close();
+  } else if (registeredAtMs_ != 0 && now - registeredAtMs_ >= AppConfig::SETUP_LINGER_MS) {
     close();
   } else if (now - lastActivityMs_ >= AppConfig::SETUP_WINDOW_MS) {
     Serial.println("[ble] setup window expired");
@@ -99,9 +104,13 @@ void SetupController::handleConnect(JsonDocument &request) {
   settings.password = request["password"] | "";
   settings.mqttHost = request["host"] | "";
   settings.mqttPort = request["port"] | AppConfig::DEFAULT_MQTT_PORT;
+  settings.mqttTls = request["tls"] | false;
+  settings.mqttUsername = request["mqtt_username"] | "";
+  settings.mqttPassword = request["mqtt_password"] | "";
   settings.ssid.trim();
   settings.username.trim();
   settings.mqttHost.trim();
+  settings.mqttUsername.trim();
   if (!settings.configured()) {
     sendError("ssid, host and port are required");
     return;
@@ -111,11 +120,17 @@ void SetupController::handleConnect(JsonDocument &request) {
   tracking_ = true;
   lastProgress_ = "";
   registeredAtMs_ = 0;
-  Serial.printf("[ble] new settings: wifi %s, server %s:%u\n", settings.ssid.c_str(), settings.mqttHost.c_str(), settings.mqttPort);
+  handover_ = settings.mqttTls;
+  handoverAtMs_ = 0;
+  Serial.printf(
+    "[ble] new settings: wifi %s, server %s:%u%s%s\n", settings.ssid.c_str(), settings.mqttHost.c_str(), settings.mqttPort,
+    settings.mqttTls ? " TLS" : "", settings.mqttUsername.isEmpty() ? "" : (" as " + settings.mqttUsername).c_str()
+  );
 }
 
 // Состояния по порядку: wifi_connecting → server_connecting → registering → registered;
-// wifi_failed и server_failed — подключение продолжает повторяться, фронт может прислать другие настройки
+// wifi_failed и server_failed — подключение продолжает повторяться, фронт может прислать другие настройки.
+// Облако (TLS): wifi_connecting → handover, дальше Bluetooth выключен и регистрацию фронт видит на сервере
 void SetupController::reportProgress(const String &boxId) {
   if (hasSettings_) {
     return;
@@ -130,6 +145,9 @@ void SetupController::reportProgress(const String &boxId) {
       doc["reason"] = reason;
       doc["message"] = WifiConnection::describeReason(reason);
     }
+  } else if (handover_) {
+    state = "handover";
+    doc["ip"] = WiFi.localIP().toString();
   } else if (!boxId.isEmpty()) {
     // box_id выдан — регистрация состоялась, даже если бокс сейчас переподключается к брокеру под новым id
     state = "registered";
@@ -153,6 +171,10 @@ void SetupController::reportProgress(const String &boxId) {
   }
   lastProgress_ = key;
   channel_.send(key);
+  if (state == "handover" && handoverAtMs_ == 0) {
+    handoverAtMs_ = millis();
+    tracking_ = false;
+  }
   if (state == "registered" && registeredAtMs_ == 0) {
     registeredAtMs_ = millis();
     tracking_ = false;
@@ -176,6 +198,7 @@ void SetupController::sendInfo(const NetworkSettings &current, const String &box
   JsonObject server = doc["server"].to<JsonObject>();
   server["host"] = current.mqttHost;
   server["port"] = current.mqttPort;
+  server["tls"] = current.mqttTls;
   server["connected"] = mqtt_.connected();
   JsonArray lockers = doc["lockers"].to<JsonArray>();
   for (const auto &locker : lockers_) {

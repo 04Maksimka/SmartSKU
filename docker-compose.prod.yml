@@ -1,5 +1,5 @@
 # Cloud (VPS) overrides: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
-# Only Caddy is reachable from outside; the other services talk inside the Docker network.
+# Only Caddy (HTTPS) and the broker's TLS listener are reachable from outside; the other services talk inside the Docker network.
 # Docker publishes ports past ufw, so internal services must not publish any.
 services:
   caddy:
@@ -17,13 +17,25 @@ services:
     depends_on:
       - frontend
 
+  # Boxes connect from the internet over TLS on 8883; 1883 stays inside the Docker network for the backend
   mosquitto:
     restart: unless-stopped
-    ports: !reset []
+    ports: !override
+      - "8883:8883"
+    volumes: !override
+      - ./infra/mosquitto/mosquitto.prod.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./infra/mosquitto/acl:/mosquitto/config/acl:ro
+      - ./secrets/mosquitto:/mosquitto/secrets:ro
+      - mosquitto_data:/mosquitto/data
 
   backend:
     restart: unless-stopped
     ports: !reset []
+    environment:
+      SMARTSKU_BACKEND_CONFIG: config/config.prod.yaml
+      SMARTSKU_BACKEND_SECRETS: /app/secrets/backend.yaml
+    volumes:
+      - ./secrets/backend.yaml:/app/secrets/backend.yaml:ro
 
   frontend:
     restart: unless-stopped

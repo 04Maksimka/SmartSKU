@@ -16,7 +16,7 @@ struct LockerHardware {
 // Настройки прошивки. Сеть и адрес брокера задаются с фронта по Bluetooth и хранятся в NVS (см. NetworkSettings)
 struct AppConfig {
   // Показывается на фронте при подключении бокса
-  static constexpr const char *FIRMWARE_VERSION = "0.7.0";
+  static constexpr const char *FIRMWARE_VERSION = "0.8.0";
   static constexpr unsigned long SERIAL_BAUD = 115200;
   // Встроенный светодиод платы: мигает, пока нет связи с брокером; горит, когда бокс работает
   static constexpr int STATUS_LED_PIN = 2;
@@ -34,6 +34,9 @@ struct AppConfig {
   static constexpr unsigned long SETUP_WINDOW_MS = 5UL * 60 * 1000;
   // После регистрации канал ещё открыт, чтобы фронт успел получить статус
   static constexpr unsigned long SETUP_LINGER_MS = 15000;
+  // Облако: Bluetooth и TLS вместе не помещаются в память, поэтому после подключения к Wi-Fi бокс сообщает фронту,
+  // что передаёт подключение серверу, и через эту паузу (чтобы сообщение дошло) выключает Bluetooth
+  static constexpr unsigned long SETUP_HANDOVER_MS = 1500;
   static constexpr const char *BLE_NAME_PREFIX = "SmartSKU-";
   // GATT-сервис настройки: построчный JSON, как UART. Те же UUID — во frontend/src/app/ble-box-link.ts
   static constexpr const char *BLE_SERVICE_UUID = "6f1c0001-8c5b-4f5e-9a57-5b1e2a8d0c11";
@@ -49,9 +52,17 @@ struct AppConfig {
   static constexpr unsigned long WIFI_DISCONNECT_WAIT_MS = 2000;
 
   static constexpr uint16_t DEFAULT_MQTT_PORT = 1883;
+  // TLS проверяет срок действия сертификата, поэтому до подключения к облаку бокс узнаёт время по NTP
+  static constexpr const char *NTP_SERVER_PRIMARY = "pool.ntp.org";
+  static constexpr const char *NTP_SERVER_SECONDARY = "time.google.com";
+  // Время раньше этого (2026-01-01, UTC) — часы ещё не синхронизированы
+  static constexpr time_t CLOCK_VALID_AFTER = 1767225600;
   static constexpr unsigned long MDNS_QUERY_TIMEOUT_MS = 2000;
   static constexpr uint16_t MQTT_KEEPALIVE_S = 30;
   static constexpr uint16_t MQTT_SOCKET_TIMEOUT_S = 5;
+  // TLS-рукопожатие через мобильный интернет, да ещё при включённом Bluetooth (Wi-Fi в энергосбережении, радио
+  // делится с BLE), идёт дольше 5 с. TCP-подключение по-прежнему ограничено коротким таймаутом
+  static constexpr uint16_t MQTT_TLS_HANDSHAKE_TIMEOUT_S = 20;
   static constexpr uint16_t MQTT_BUFFER_SIZE = 1024;
   static constexpr unsigned long MQTT_RECONNECT_INTERVAL_MS = 3000;
   static constexpr const char *TOPIC_PREFIX = "smartsku";

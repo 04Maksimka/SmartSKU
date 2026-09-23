@@ -74,7 +74,7 @@ void BoxApp::loadNetworkSettings() {
     return;
   }
   wifi_.configure(network_);
-  mqtt_.setServer(network_.mqttHost, network_.mqttPort);
+  mqtt_.setServer(network_);
 }
 
 // Другая сеть или другой сервер: box_id мог быть выдан другим бэкендом, поэтому регистрируемся заново.
@@ -85,15 +85,17 @@ void BoxApp::applyNetworkSettings(const NetworkSettings &settings) {
   storage_.forgetBoxId();
   startProvisioning();
   wifi_.configure(network_);
-  mqtt_.setServer(network_.mqttHost, network_.mqttPort);
+  mqtt_.setServer(network_);
 }
 
 void BoxApp::update() {
-  if (setupButton_.update()) {
+  bool openSetup = setupButton_.update();
+  if (openSetup) {
     Serial.println("[app] BOOT held: setup mode");
-    setup_.open();
   }
-  if (!network_.configured() && !setup_.isOpen()) {
+  if (openSetup || (!network_.configured() && !setup_.isOpen())) {
+    // TLS-соединение освобождает память до того, как поднимется Bluetooth
+    mqtt_.setPaused(network_.mqttTls);
     setup_.open();
   }
   setup_.update(network_, boxId_);
@@ -103,6 +105,7 @@ void BoxApp::update() {
   }
 
   wifi_.update();
+  mqtt_.setPaused(setup_.isOpen() && network_.mqttTls);
   mqtt_.update(wifi_.connected());
 
   if (!receivedBoxId_.isEmpty()) {
@@ -331,7 +334,12 @@ void BoxApp::handleConsole(const ConsoleCommand &command) {
       ESP.restart();
       break;
     case ConsoleCommand::Type::Setup:
-      setup_.open();
+      if (setup_.isOpen()) {
+        setup_.close();
+      } else {
+        mqtt_.setPaused(network_.mqttTls);
+        setup_.open();
+      }
       break;
     case ConsoleCommand::Type::Help:
     case ConsoleCommand::Type::Invalid:
@@ -342,9 +350,9 @@ void BoxApp::handleConsole(const ConsoleCommand &command) {
 
 void BoxApp::printStatus() {
   Serial.printf(
-    "[app] hardware_id %s | box_id %s | wifi %s %s (%s, %d dBm) | mqtt %s:%u %s | setup %s\n", hardwareId_.c_str(),
+    "[app] hardware_id %s | box_id %s | wifi %s %s (%s, %d dBm) | mqtt %s:%u%s %s | setup %s\n", hardwareId_.c_str(),
     boxId_.isEmpty() ? "-" : boxId_.c_str(), network_.ssid.c_str(), wifi_.connected() ? "up" : "down", WiFi.localIP().toString().c_str(), WiFi.RSSI(),
-    network_.mqttHost.c_str(), network_.mqttPort, mqtt_.connected() ? "up" : "down", setup_.isOpen() ? "open" : "closed"
+    network_.mqttHost.c_str(), network_.mqttPort, network_.mqttTls ? " tls" : "", mqtt_.connected() ? "up" : "down", setup_.isOpen() ? "open" : "closed"
   );
   for (auto &locker : lockers_) {
     locker->printStatus();

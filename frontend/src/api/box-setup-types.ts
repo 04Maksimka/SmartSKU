@@ -20,7 +20,7 @@ export interface BoxInfoMessage {
   firmware: string;
   box_id: string;
   wifi: { ssid: string; username: string; connected: boolean; ip?: string; rssi?: number };
-  server: { host: string; port: number; connected: boolean };
+  server: { host: string; port: number; tls?: boolean; connected: boolean };
   lockers: BoxLockerHardware[];
 }
 
@@ -41,7 +41,9 @@ export type SetupState =
   | "server_connecting"
   | "server_failed"
   | "registering"
-  | "registered";
+  | "registered"
+  /** Cloud: Wi-Fi is up, the box turns Bluetooth off and connects to the server; the dashboard watches the backend. */
+  | "handover";
 
 export interface StatusMessage {
   type: "status";
@@ -68,6 +70,10 @@ export interface ConnectRequest {
   password: string;
   host: string;
   port: number;
+  /** Cloud broker: TLS and the box account; username/password above are for WPA2 Enterprise. */
+  tls: boolean;
+  mqtt_username: string;
+  mqtt_password: string;
 }
 
 export type BoxRequest = { op: "info" } | { op: "scan" } | ConnectRequest;
@@ -75,4 +81,7 @@ export type BoxRequest = { op: "info" } | { op: "scan" } | ConnectRequest;
 export interface OnboardingSettings {
   broker_host: string;
   broker_port: number;
+  broker_tls: boolean;
+  broker_username: string;
+  broker_password: string;
 }
