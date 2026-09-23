@@ -19,14 +19,17 @@ export class BoxCard extends LitElement {
         display: flex;
         justify-content: space-between;
         align-items: flex-start;
-        gap: 12px;
+        flex-wrap: wrap;
+        gap: 8px 12px;
         margin-bottom: 14px;
       }
 
       h3 {
         margin: 0;
-        font-size: 17px;
-        letter-spacing: -0.01em;
+        font-family: var(--mono);
+        font-size: 16px;
+        font-weight: 600;
+        letter-spacing: 0.02em;
       }
 
       .hw-id {
@@ -47,6 +50,25 @@ export class BoxCard extends LitElement {
         display: grid;
         grid-template-columns: repeat(var(--columns), minmax(0, 1fr));
         gap: 10px;
+      }
+
+      .offline-note {
+        margin: -4px 0 12px;
+        padding: 8px 10px;
+        border-radius: var(--r-xs, 6px);
+        background: var(--tone-bad-bg);
+        color: var(--tone-bad);
+        font-size: 12.5px;
+      }
+
+      @media (max-width: 720px) {
+        .card {
+          padding: 12px;
+        }
+
+        .grid {
+          gap: 8px;
+        }
       }
     `,
   ];
@@ -71,7 +93,7 @@ export class BoxCard extends LitElement {
           <div class="actions">
             ${unready
               ? html`<span class="pill warn" title="Слот не настроен или ячейка не взвешена пустой: учёт по ним не ведётся">
-                  ⚠ не настроено: ${unready}
+                  ⚠ внимание: ${unready}
                 </span>`
               : ""}
             <span class="pill ${box.online ? "good" : "bad"}" title="Статус${since}">
@@ -79,6 +101,11 @@ export class BoxCard extends LitElement {
             </span>
           </div>
         </header>
+        ${box.online
+          ? ""
+          : html`<div class="offline-note">
+              Нет связи с боксом${since}: показаны последние полученные данные.
+            </div>`}
         ${lockers.length
           ? html`<div class="grid" style="--columns: ${this.overview.columns}">
               ${repeat(

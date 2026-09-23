@@ -17,7 +17,7 @@ export class Theme {
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: var(--r, 14px);
-      box-shadow: 0 1px 2px rgba(20, 23, 28, 0.04);
+      box-shadow: var(--shadow);
     }
 
     .muted {
@@ -89,6 +89,31 @@ export class Theme {
       margin: 0;
       font-size: 18px;
       letter-spacing: -0.01em;
+    }
+
+    .section-title h2 .muted {
+      font-weight: 500;
+    }
+
+    .section-title input[type="search"] {
+      width: 260px;
+      max-width: 100%;
+    }
+
+    .count {
+      display: inline-block;
+      min-width: 22px;
+      margin-left: 6px;
+      padding: 0 7px;
+      border-radius: 999px;
+      background: var(--chip);
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 600;
+      line-height: 20px;
+      text-align: center;
+      vertical-align: 2px;
     }
 
     .table-wrap {
@@ -207,6 +232,76 @@ export class Theme {
       display: flex;
       gap: 8px;
       flex-wrap: wrap;
+    }
+
+    /* Phones: tables turn into stacked cards (each component lays out its cells with grid areas), search fields
+       take the whole row */
+    @media (max-width: 720px) {
+      .section-title {
+        align-items: stretch;
+        flex-direction: column;
+      }
+
+      .section-title input[type="search"] {
+        width: 100%;
+      }
+
+      .filters {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .filters input[type="search"] {
+        grid-column: 1 / -1;
+      }
+
+      table.cards,
+      table.cards tbody {
+        display: block;
+      }
+
+      table.cards thead {
+        display: none;
+      }
+
+      table.cards tr {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        grid-auto-flow: row dense;
+        gap: 4px 12px;
+        padding: 12px 14px;
+        border-bottom: 1px solid var(--border-2, var(--border));
+      }
+
+      table.cards tr:last-child {
+        border-bottom: none;
+      }
+
+      table.cards td {
+        display: block;
+        padding: 0;
+        border: none;
+        min-width: 0;
+        white-space: normal;
+        text-align: left;
+      }
+
+      table.cards td.end {
+        text-align: right;
+      }
+
+      table.cards td[data-label]::before {
+        content: attr(data-label) " ";
+        color: var(--muted);
+        font-family: var(--mono);
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+
+      table.cards td.phone-hidden {
+        display: none;
+      }
     }
   `;
 }
