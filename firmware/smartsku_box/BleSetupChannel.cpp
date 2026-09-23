@@ -48,14 +48,15 @@ void BleSetupChannel::initStack() {
   static RxCallbacks *rxCallbacks = new RxCallbacks(*this);
   server_->setCallbacks(serverCallbacks);
 
-  BLEService *service = server_->createService(AppConfig::BLE_SERVICE_UUID);
-  BLECharacteristic *rx = service->createCharacteristic(
+  service_ = server_->createService(AppConfig::BLE_SERVICE_UUID);
+  rx_ = service_->createCharacteristic(
     AppConfig::BLE_RX_UUID, BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_WRITE_NR
   );
-  rx->setCallbacks(rxCallbacks);
-  tx_ = service->createCharacteristic(AppConfig::BLE_TX_UUID, BLECharacteristic::PROPERTY_NOTIFY);
-  tx_->addDescriptor(new BLE2902());
-  service->start();
+  rx_->setCallbacks(rxCallbacks);
+  tx_ = service_->createCharacteristic(AppConfig::BLE_TX_UUID, BLECharacteristic::PROPERTY_NOTIFY);
+  txCccd_ = new BLE2902();
+  tx_->addDescriptor(txCccd_);
+  service_->start();
 
   BLEAdvertising *advertising = BLEDevice::getAdvertising();
   advertising->addServiceUUID(AppConfig::BLE_SERVICE_UUID);
@@ -72,7 +73,7 @@ void BleSetupChannel::open() {
   }
   BLEDevice::startAdvertising();
   open_ = true;
-  Serial.printf("[ble] setup mode: visible as %s\n", deviceName_.c_str());
+  Serial.printf("[ble] setup mode: visible as %s (free heap %u)\n", deviceName_.c_str(), ESP.getFreeHeap());
 }
 
 // Стек выключается целиком: только так можно вернуть Wi-Fi без энергосбережения
@@ -81,16 +82,27 @@ void BleSetupChannel::close() {
     return;
   }
   BLEDevice::deinit(false);
+  releaseGattObjects();
   initialized_ = false;
-  server_ = nullptr;
-  tx_ = nullptr;
   open_ = false;
   clientConnected_ = false;
   xSemaphoreTake(mutex_, portMAX_DELAY);
   partial_ = "";
   requests_.clear();
   xSemaphoreGive(mutex_);
-  Serial.println("[ble] setup mode closed");
+  Serial.printf("[ble] setup mode closed (free heap %u)\n", ESP.getFreeHeap());
+}
+
+// Стек уже выключен и сервер удалён, поэтому на эти объекты больше никто не ссылается
+void BleSetupChannel::releaseGattObjects() {
+  delete txCccd_;
+  delete tx_;
+  delete rx_;
+  txCccd_ = nullptr;
+  tx_ = nullptr;
+  rx_ = nullptr;
+  service_ = nullptr;
+  server_ = nullptr;
 }
 
 bool BleSetupChannel::takeConnectedEvent() {

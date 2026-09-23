@@ -18,7 +18,7 @@
 #include "WifiConnection.h"
 
 // Прошивка бокса по MQTT-протоколу из README:
-// 0) нет настроек сети — ждёт их по Bluetooth (режим подключения, его же включает удержание BOOT);
+// 0) нет настроек сети — ждёт их по Bluetooth (режим подключения, его же включает удержание кнопки подключения);
 // 1) нет box_id в памяти — запрашивает его у бэкенда (provisioning) по hardware_id;
 // 2) дальше шлёт box_data каждые TELEMETRY_INTERVAL_MS и выполняет команды scale / calibration / cancel / indicators;
 //    итоги настройки весов и калибровки уходят в топик events.
@@ -67,6 +67,7 @@ private:
   String boxId_;
   // box_id из ответа бэкенда; сессия переключается в update(), а не внутри колбэка MQTT
   String receivedBoxId_;
+  bool wasSetupOpen_ = false;
   bool wasOnline_ = false;
   unsigned long lastProvisionRequestMs_ = 0;
   unsigned long lastTelemetryMs_ = 0;

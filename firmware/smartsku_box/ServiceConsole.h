@@ -22,7 +22,7 @@ struct ConsoleCommand {
 //   v                    — вкл/выкл строку показаний раз в секунду
 //   forget               — забыть box_id и перезагрузиться (бокс заново зарегистрируется)
 //   reset                — стереть box_id и настройку весов (сеть и метки ячеек остаются) и перезагрузиться
-//   setup                — режим подключения по Bluetooth (то же, что удержание BOOT)
+//   setup                — режим подключения по Bluetooth (то же, что удержание кнопки подключения)
 class ServiceConsole {
 public:
   static constexpr size_t MAX_LINE = 100;

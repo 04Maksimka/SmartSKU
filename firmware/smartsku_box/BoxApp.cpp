@@ -91,7 +91,7 @@ void BoxApp::applyNetworkSettings(const NetworkSettings &settings) {
 void BoxApp::update() {
   bool openSetup = setupButton_.update();
   if (openSetup) {
-    Serial.println("[app] BOOT held: setup mode");
+    Serial.println("[app] setup button held: setup mode");
   }
   if (openSetup || (!network_.configured() && !setup_.isOpen())) {
     // TLS-соединение освобождает память до того, как поднимется Bluetooth
@@ -103,6 +103,12 @@ void BoxApp::update() {
   if (setup_.takeSettings(newSettings)) {
     applyNetworkSettings(newSettings);
   }
+
+  if (wasSetupOpen_ && !setup_.isOpen() && ESP.getFreeHeap() < AppConfig::MIN_FREE_HEAP_AFTER_SETUP) {
+    Serial.printf("[app] free heap %u after setup mode is too low: rebooting\n", ESP.getFreeHeap());
+    ESP.restart();
+  }
+  wasSetupOpen_ = setup_.isOpen();
 
   wifi_.update();
   mqtt_.setPaused(setup_.isOpen() && network_.mqttTls);

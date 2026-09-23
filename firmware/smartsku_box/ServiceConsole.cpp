@@ -124,5 +124,5 @@ void ServiceConsole::printHelp() {
   Serial.println("  v                   toggle readings every second");
   Serial.println("  forget              forget box_id and reboot");
   Serial.println("  reset               forget box_id and load cell setup (keeps network and cell tags) and reboot");
-  Serial.println("  setup               Bluetooth setup mode on/off (on = holding BOOT for 3 s)");
+  Serial.println("  setup               Bluetooth setup mode on/off (on = holding the setup button for 3 s)");
 }

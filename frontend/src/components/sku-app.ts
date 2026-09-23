@@ -238,7 +238,7 @@ export class SkuApp extends LitElement {
               )}
             </div>`
           : html`<div class="card empty empty-state">
-              <div>Устройств нет. Зажмите BOOT на плате бокса на 3 секунды и подключите его по Bluetooth.</div>
+              <div>Устройств нет. Зажмите кнопку подключения на боксе на 3 секунды и подключите его по Bluetooth.</div>
               <button class="primary" @click=${this.openSetup}>Подключить бокс</button>
             </div>`}
       </section>

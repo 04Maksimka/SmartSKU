@@ -16,7 +16,7 @@ struct LockerHardware {
 // Настройки прошивки. Сеть и адрес брокера задаются с фронта по Bluetooth и хранятся в NVS (см. NetworkSettings)
 struct AppConfig {
   // Показывается на фронте при подключении бокса
-  static constexpr const char *FIRMWARE_VERSION = "0.8.0";
+  static constexpr const char *FIRMWARE_VERSION = "0.8.1";
   static constexpr unsigned long SERIAL_BAUD = 115200;
   // Встроенный светодиод платы: мигает, пока нет связи с брокером; горит, когда бокс работает
   static constexpr int STATUS_LED_PIN = 2;
@@ -26,9 +26,9 @@ struct AppConfig {
   static constexpr unsigned long STATUS_SETUP_PERIOD_MS = 1000;
   static constexpr unsigned long STATUS_SETUP_FLASH_MS = 100;
 
-  // Режим подключения по Bluetooth: удержание кнопки BOOT (GPIO0) на работающей плате.
-  // Держать BOOT при подаче питания нельзя — плата уйдёт в режим прошивки
-  static constexpr int SETUP_BUTTON_PIN = 0;
+  // Режим подключения по Bluetooth: удержание кнопки на корпусе — D13 (GPIO13) и GND, подтяжка внутренняя.
+  // GPIO13 свободен и не участвует в загрузке (0, 2, 5, 12, 15 — стартовые; на 2 ещё и светодиод статуса)
+  static constexpr int SETUP_BUTTON_PIN = 13;
   static constexpr unsigned long SETUP_HOLD_MS = 3000;
   // Сколько бокс виден по Bluetooth, если к нему никто не подключился
   static constexpr unsigned long SETUP_WINDOW_MS = 5UL * 60 * 1000;
@@ -37,6 +37,10 @@ struct AppConfig {
   // Облако: Bluetooth и TLS вместе не помещаются в память, поэтому после подключения к Wi-Fi бокс сообщает фронту,
   // что передаёт подключение серверу, и через эту паузу (чтобы сообщение дошло) выключает Bluetooth
   static constexpr unsigned long SETUP_HANDOVER_MS = 1500;
+  // Ядро ESP32 не даёт удалить сервис Bluetooth: каждый сеанс режима подключения оставляет ~1 КБ. После закрытия
+  // режима свободно ~147 КБ; если меньше этого порога (~25 сеансов без перезагрузки), бокс перезагружается —
+  // иначе со временем не поместится TLS (ему нужно ~50 КБ). Настройки в NVS, бокс сразу снова на связи
+  static constexpr uint32_t MIN_FREE_HEAP_AFTER_SETUP = 120000;
   static constexpr const char *BLE_NAME_PREFIX = "SmartSKU-";
   // GATT-сервис настройки: построчный JSON, как UART. Те же UUID — во frontend/src/app/ble-box-link.ts
   static constexpr const char *BLE_SERVICE_UUID = "6f1c0001-8c5b-4f5e-9a57-5b1e2a8d0c11";

@@ -2,7 +2,7 @@
 
 #include <Arduino.h>
 
-// Кнопка, которая срабатывает при удержании. Замыкает пин на землю (как BOOT на GPIO0 у DevKit)
+// Кнопка, которая срабатывает при удержании. Замыкает пин на землю, подтяжка вверх внутренняя
 class HoldButton {
 public:
   HoldButton(int pin, unsigned long holdMs) : pin_(pin), holdMs_(holdMs) {}

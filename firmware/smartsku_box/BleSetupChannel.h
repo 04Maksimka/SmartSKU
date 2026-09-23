@@ -9,7 +9,9 @@
 #include <freertos/semphr.h>
 
 class BLECharacteristic;
+class BLEDescriptor;
 class BLEServer;
+class BLEService;
 
 // Канал настройки по Bluetooth LE. Как UART: фронт пишет JSON-строки в RX, бокс отвечает JSON-строками через
 // уведомления TX. Строки заканчиваются '\n' и режутся на куски под MTU — так пролезают и длинные списки сетей.
@@ -40,12 +42,18 @@ public:
 
 private:
   void initStack();
+  void releaseGattObjects();
 
   const String deviceName_;
   bool initialized_ = false;
   bool open_ = false;
   BLEServer *server_ = nullptr;
+  // Сервис, характеристики и дескриптор создаются на каждое открытие, а BLEDevice::deinit() удаляет только сервер:
+  // без ручного удаления каждый цикл открыть/закрыть терял ~2.9 КБ — и в облаке TLS переставал помещаться
+  BLEService *service_ = nullptr;
+  BLECharacteristic *rx_ = nullptr;
   BLECharacteristic *tx_ = nullptr;
+  BLEDescriptor *txCccd_ = nullptr;
 
   SemaphoreHandle_t mutex_;
   String partial_;
