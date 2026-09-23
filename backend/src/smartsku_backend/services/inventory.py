@@ -60,6 +60,7 @@ class ComponentService:
         states = await self._session.scalars(select(LockerState).where(LockerState.nfc_id == nfc_id))
         for state in states:
             state.quantity = None
+            state.logged_quantity = None
             # Next telemetry from this box is reprocessed, which switches the released cell's indicators off.
             self._cache.forget_box(state.box_id)
         await self._session.commit()
