@@ -200,7 +200,7 @@ export class SkuApp extends LitElement {
 
       .summary {
         display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
+        grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 10px;
         margin-bottom: 28px;
       }
@@ -209,6 +209,7 @@ export class SkuApp extends LitElement {
         padding: 12px 14px;
         display: flex;
         flex-direction: column;
+        justify-content: space-between;
         gap: 2px;
         min-width: 0;
       }
@@ -236,23 +237,23 @@ export class SkuApp extends LitElement {
         font-weight: 500;
       }
 
-      .metric.attention .value {
-        color: var(--tone-warn);
-      }
-
       .metric.bad .value {
         color: var(--tone-bad);
       }
 
       @media (max-width: 720px) {
         .summary {
-          grid-template-columns: repeat(2, minmax(0, 1fr));
           gap: 8px;
           margin-bottom: 22px;
         }
 
         .metric {
           padding: 10px 12px;
+        }
+
+        .metric .label {
+          font-size: 10px;
+          letter-spacing: 0.03em;
         }
 
         .metric .value {
@@ -563,9 +564,6 @@ export class SkuApp extends LitElement {
     const lockers = this.lockers();
     const online = boxes.filter(({ box }) => box.online).length;
     const inserted = lockers.filter(({ locker }) => locker.nfc_flag).length;
-    const attention = lockers.filter(
-      ({ locker }) => !locker.slot_ready || (locker.nfc_flag && (!locker.cell_tared || locker.tag_error)),
-    ).length;
     return html`
       <div class="summary">
         <div class="card metric ${online < boxes.length ? "bad" : ""}">
@@ -579,10 +577,6 @@ export class SkuApp extends LitElement {
         <div class="card metric">
           <span class="label">Компоненты</span>
           <span class="value">${this.snapshot.components.length}</span>
-        </div>
-        <div class="card metric ${attention ? "attention" : ""}" title="Слот не настроен, ячейка не взвешена пустой или метка не читается">
-          <span class="label">Требуют внимания</span>
-          <span class="value">${attention}</span>
         </div>
       </div>
     `;
