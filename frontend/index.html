@@ -3,8 +3,15 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#E9EAEC" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#0C0D10" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#E9EAEC" media="(prefers-color-scheme: light)" data-scheme="light" />
+    <meta name="theme-color" content="#0C0D10" media="(prefers-color-scheme: dark)" data-scheme="dark" />
+    <script>
+      // Theme chosen with the header switch (ThemePreference), applied before the first paint to avoid a flash
+      try {
+        const theme = localStorage.getItem("skubox.theme");
+        if (theme === "light" || theme === "dark") document.documentElement.dataset.theme = theme;
+      } catch {}
+    </script>
     <title>SKUBOX</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📦</text></svg>" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -60,8 +67,9 @@
         --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
       }
 
+      /* Dark theme: by the system setting unless the header switch chose light (ThemePreference), or forced */
       @media (prefers-color-scheme: dark) {
-        :root {
+        :root:not([data-theme="light"]) {
           color-scheme: dark;
           --bg: #0C0D10;
           --surface: #14171C;
@@ -95,6 +103,41 @@
           --grid: rgba(255, 255, 255, 0.03);
           --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 6px 20px -10px rgba(0, 0, 0, 0.6);
         }
+      }
+
+      :root[data-theme="dark"] {
+        color-scheme: dark;
+        --bg: #0C0D10;
+        --surface: #14171C;
+        --surface-2: #1A1E25;
+        --border: #2B303A;
+        --border-2: #232830;
+        --chip: #232830;
+        --text: #E2E5EB;
+        --muted: #8A8F99;
+
+        --accent: #E09A34;
+        --accent-ink: #20242D;
+        --accent-soft: rgba(224, 154, 52, 0.16);
+
+        --blue-soft: rgba(46, 74, 120, 0.22);
+
+        --panel: #08090B;
+        --panel-2: #0C0D10;
+
+        --tone-neutral: #C3C9D3;
+        --tone-neutral-bg: #232830;
+        --tone-good: #4CD9A0;
+        --tone-good-bg: rgba(47, 158, 110, 0.14);
+        --tone-bad: #F87171;
+        --tone-bad-bg: rgba(211, 64, 46, 0.14);
+        --tone-warn: #F5B95E;
+        --tone-warn-bg: rgba(224, 154, 52, 0.14);
+        --tone-info: #93AADB;
+        --tone-info-bg: rgba(46, 74, 120, 0.18);
+
+        --grid: rgba(255, 255, 255, 0.03);
+        --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 6px 20px -10px rgba(0, 0, 0, 0.6);
       }
 
       body {

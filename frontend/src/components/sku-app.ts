@@ -6,6 +6,7 @@ import type { CommandService } from "../app/command-service";
 import { DashboardEvents, type CancelCalibrationRequest, type ReleaseComponentRequest } from "../app/dashboard-events";
 import type { DashboardSnapshot, DashboardStore, LockerOverview } from "../app/dashboard-store";
 import { Formatter } from "../app/formatter";
+import { ThemePreference, type ThemeChoice } from "../app/theme-preference";
 import type { BoxSetupDialog } from "./box-setup-dialog";
 import type { CalibrationDialog } from "./calibration-dialog";
 import type { ScaleSetupDialog } from "./scale-setup-dialog";
@@ -28,6 +29,7 @@ export class SkuApp extends LitElement {
     snapshot: { state: true },
     actionError: { state: true },
     tab: { state: true },
+    theme: { state: true },
   };
 
   static override styles = [
@@ -122,6 +124,15 @@ export class SkuApp extends LitElement {
         font-family: var(--mono);
         font-size: 11px;
         color: var(--muted);
+      }
+
+      .theme-switch {
+        width: 34px;
+        height: 34px;
+        padding: 0;
+        font-size: 16px;
+        line-height: 1;
+        flex: none;
       }
 
       /* On phones the actions leave the sticky header and open the "Склад" tab instead */
@@ -290,14 +301,41 @@ export class SkuApp extends LitElement {
   declare snapshot: DashboardSnapshot;
   declare actionError: string | null;
   declare tab: Tab;
+  declare theme: ThemeChoice;
 
   private readonly format = new Formatter();
+  private readonly themePreference = new ThemePreference();
+  private static readonly THEME_LABELS: Record<ThemeChoice, { icon: string; title: string }> = {
+    system: { icon: "◐", title: "Тема как в системе" },
+    light: { icon: "☀", title: "Светлая тема" },
+    dark: { icon: "☾", title: "Тёмная тема" },
+  };
   private unsubscribe: (() => void) | null = null;
 
   constructor() {
     super();
     this.actionError = null;
     this.tab = this.tabFromHash();
+    this.theme = this.themePreference.current();
+    this.themePreference.apply(this.theme);
+  }
+
+  private readonly switchTheme = (): void => {
+    this.theme = this.themePreference.next(this.theme);
+    this.themePreference.set(this.theme);
+  };
+
+  private renderThemeSwitch() {
+    const { icon, title } = SkuApp.THEME_LABELS[this.theme];
+    const next = SkuApp.THEME_LABELS[this.themePreference.next(this.theme)].title.toLowerCase();
+    return html`<button
+      class="theme-switch"
+      title="${title}. Нажмите: ${next}"
+      aria-label=${title}
+      @click=${this.switchTheme}
+    >
+      ${icon}
+    </button>`;
   }
 
   private tabFromHash(): Tab {
@@ -398,6 +436,7 @@ export class SkuApp extends LitElement {
           </span>
           ${this.renderTabs()}
           ${this.renderStatus()}
+          ${this.renderThemeSwitch()}
           <div class="toolbar">${this.renderActions()}</div>
         </div>
       </div>
