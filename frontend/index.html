@@ -3,7 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>SCUBOX</title>
+    <meta name="theme-color" content="#E9EAEC" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0C0D10" media="(prefers-color-scheme: dark)" />
+    <title>SKUBOX</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📦</text></svg>" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -48,6 +50,9 @@
 
         --grid: rgba(20, 23, 28, 0.05);
         --r: 14px;
+        /* Page side padding: 16px on phones, up to 28px on wide screens */
+        --gutter: clamp(16px, 3vw, 28px);
+        --shadow: 0 1px 2px rgba(20, 23, 28, 0.05), 0 4px 16px -8px rgba(20, 23, 28, 0.12);
         --r-sm: 9px;
         --r-xs: 6px;
 
@@ -88,12 +93,13 @@
           --tone-info-bg: rgba(46, 74, 120, 0.18);
 
           --grid: rgba(255, 255, 255, 0.03);
+          --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 6px 20px -10px rgba(0, 0, 0, 0.6);
         }
       }
 
       body {
         margin: 0;
-        padding: 0 20px;
+        padding: 0 var(--gutter);
         background-color: var(--bg);
         background-image:
           linear-gradient(var(--grid) 1px, transparent 1px),
@@ -102,6 +108,8 @@
         color: var(--text);
         font: 14px/1.45 var(--sans);
         -webkit-font-smoothing: antialiased;
+        -webkit-text-size-adjust: 100%;
+        overflow-x: hidden;
       }
     </style>
   </head>

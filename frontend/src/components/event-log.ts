@@ -22,6 +22,54 @@ export class EventLog extends LitElement {
         font-weight: 700;
       }
 
+      .change {
+        display: inline-flex;
+        align-items: baseline;
+        gap: 8px;
+        white-space: nowrap;
+      }
+
+      .component {
+        overflow-wrap: break-word;
+      }
+
+      .note {
+        margin-top: 4px;
+        font-size: 12.5px;
+      }
+
+      td.when {
+        font-family: var(--mono);
+        font-size: 12.5px;
+      }
+
+      /* Phone card: event and time, component, place and the change */
+      @media (max-width: 720px) {
+        td.what {
+          grid-column: 1;
+          grid-row: 1;
+        }
+
+        td.when {
+          grid-column: 2;
+          grid-row: 1;
+        }
+
+        td.component {
+          grid-column: 1 / -1;
+        }
+
+        td.where {
+          grid-column: 1;
+          font-size: 12.5px;
+          color: var(--muted);
+        }
+
+        td.qty {
+          grid-column: 2;
+        }
+      }
+
       .delta.plus {
         color: var(--tone-good);
       }
@@ -54,7 +102,7 @@ export class EventLog extends LitElement {
     const visible = this.filtered();
     return html`
       <div class="section-title">
-        <h2>Журнал <span class="muted">последние ${this.events.length}</span></h2>
+        <h2>Журнал<span class="count" title="Последние события">${this.events.length}</span></h2>
         <div class="filters">
           <select @change=${(event: Event) => (this.boxFilter = (event.target as HTMLSelectElement).value)}>
             <option value="">Все боксы</option>
@@ -72,7 +120,7 @@ export class EventLog extends LitElement {
           </select>
           <input
             type="search"
-            placeholder="Компонент или ячейка"
+            placeholder="Компонент или метка"
             .value=${this.query}
             @input=${(event: Event) => (this.query = (event.target as HTMLInputElement).value)}
           />
@@ -80,15 +128,14 @@ export class EventLog extends LitElement {
       </div>
       <div class="card table-wrap">
         ${visible.length
-          ? html`<table>
+          ? html`<table class="cards">
               <thead>
                 <tr>
                   <th>Время</th>
                   <th>Событие</th>
                   <th>Компонент</th>
                   <th>Где</th>
-                  <th class="num">Изменение</th>
-                  <th class="num">Было → стало</th>
+                  <th class="num">Количество</th>
                   <th class="num">Вес</th>
                 </tr>
               </thead>
@@ -124,35 +171,39 @@ export class EventLog extends LitElement {
     const [label, tone] = this.format.eventLabel(item.event_type);
     return html`
       <tr data-id=${item.id}>
-        <td class="muted nowrap" title=${this.format.date(item.created_at).toLocaleString("ru-RU")}>
+        <td class="when muted nowrap end" title=${this.format.date(item.created_at).toLocaleString("ru-RU")}>
           ${this.format.moment(item.created_at)}
         </td>
-        <td>
+        <td class="what">
           <span class="pill ${tone}">${label}</span>
-          ${item.note ? html`<div class="muted">${item.note}</div>` : nothing}
+          ${item.note ? html`<div class="note muted">${item.note}</div>` : nothing}
         </td>
-        <td class="nowrap">
-          <div>${item.component_name ?? html`<span class="muted">не откалибрована</span>`}</div>
-          <div class="muted mono">${item.nfc_id ?? ""}</div>
+        <td class="component">
+          ${item.component_name ?? (item.nfc_id ? html`<span class="muted">не откалибрована</span>` : nothing)}
+          ${item.nfc_id ? html`<div class="muted mono">${item.nfc_id}</div>` : nothing}
         </td>
-        <td class="nowrap">${this.format.location(this.boxNames.get(item.box_id) ?? item.box_id, item.locker_id)}</td>
-        <td class="num">${this.renderDelta(item)}</td>
-        <td class="num">
-          ${item.quantity_before === null && item.quantity_after === null
-            ? html`<span class="muted">—</span>`
-            : `${item.quantity_before ?? "—"} → ${item.quantity_after ?? "—"}`}
+        <td class="where nowrap">${this.format.location(this.boxNames.get(item.box_id) ?? item.box_id, item.locker_id)}</td>
+        <td class="qty num end ${item.quantity_before === null && item.quantity_after === null ? "phone-hidden" : ""}">
+          ${this.renderChange(item)}
         </td>
-        <td class="num muted">${this.format.weight(item.weight)}</td>
+        <td class="num muted phone-hidden">${this.format.weight(item.weight)}</td>
       </tr>
     `;
   }
 
-  private renderDelta(item: InventoryEvent) {
-    if (item.quantity_delta === null || item.quantity_delta === 0) {
+  /** Delta in pieces and "before → after"; a dash when the event does not change the count. */
+  private renderChange(item: InventoryEvent) {
+    if (item.quantity_before === null && item.quantity_after === null) {
       return html`<span class="muted">—</span>`;
     }
+    const range = html`<span class="muted">${item.quantity_before ?? "—"} → ${item.quantity_after ?? "—"}</span>`;
+    if (item.quantity_delta === null || item.quantity_delta === 0) {
+      return range;
+    }
     const direction = item.quantity_delta > 0 ? "plus" : "minus";
-    return html`<span class="delta ${direction}">${this.format.delta(item.quantity_delta)} шт</span>`;
+    return html`<span class="change">
+      <span class="delta ${direction}">${this.format.delta(item.quantity_delta)} шт</span>${range}
+    </span>`;
   }
 
   private filtered(): InventoryEvent[] {
