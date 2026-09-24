@@ -1,4 +1,5 @@
 import { BoxCard } from "../components/box-card";
+import { BoxMini } from "../components/box-mini";
 import { BoxSetupDialog } from "../components/box-setup-dialog";
 import { CalibrationDialog } from "../components/calibration-dialog";
 import { CalibrationList } from "../components/calibration-list";
@@ -16,6 +17,7 @@ export class ElementRegistry {
     ["sku-app", SkuApp],
     ["sku-box-card", BoxCard],
     ["sku-stand-view", StandView],
+    ["sku-box-mini", BoxMini],
     ["sku-locker-tile", LockerTile],
     ["sku-component-table", ComponentTable],
     ["sku-calibration-list", CalibrationList],

@@ -25,6 +25,7 @@ export class DashboardEvents {
   static readonly SCALE_SETUP = "sku-scale-setup";
   static readonly CANCEL_CALIBRATION = "sku-cancel-calibration";
   static readonly RELEASE_COMPONENT = "sku-release-component";
+  static readonly SELECT_BOX = "sku-select-box";
   static readonly PLACE_BOX = "sku-place-box";
   static readonly PLACE_AT = "sku-place-at";
   static readonly UNPLACE_BOX = "sku-unplace-box";
@@ -51,6 +52,11 @@ export class DashboardEvents {
 
   releaseComponent(target: EventTarget, request: ReleaseComponentRequest): void {
     this.dispatch(target, DashboardEvents.RELEASE_COMPONENT, request);
+  }
+
+  /** Opens the full card of a box tapped on the stand map. */
+  selectBox(target: EventTarget, boxId: string): void {
+    this.dispatch(target, DashboardEvents.SELECT_BOX, boxId);
   }
 
   /** Starts choosing a place on a stand for the box (a new one or one being moved). */

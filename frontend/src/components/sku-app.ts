@@ -37,6 +37,7 @@ export class SkuApp extends LitElement {
     theme: { state: true },
     editingLayout: { state: true },
     placingBoxId: { state: true },
+    selectedBoxId: { state: true },
   };
 
   static override styles = [
@@ -280,11 +281,37 @@ export class SkuApp extends LitElement {
         margin-top: 36px;
       }
 
-      .boxes {
+      .mini-row {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(min(100%, 460px), 1fr));
-        gap: 16px;
+        grid-template-columns: repeat(auto-fill, minmax(140px, 190px));
+        gap: 8px;
       }
+
+      /* The stand map and the card of the chosen box side by side; on narrow screens the card goes below */
+      .stands-layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 600px);
+        align-items: start;
+        gap: 24px;
+      }
+
+      .box-detail {
+        position: sticky;
+        top: 78px;
+        scroll-margin-top: 80px;
+      }
+
+      @media (max-width: 1100px) {
+        .stands-layout {
+          grid-template-columns: minmax(0, 1fr);
+        }
+
+        .box-detail {
+          position: static;
+          max-width: 640px;
+        }
+      }
+
 
       .layout-bar {
         display: flex;
@@ -350,6 +377,8 @@ export class SkuApp extends LitElement {
   declare editingLayout: boolean;
   /** Box the user is choosing a place on a stand for. */
   declare placingBoxId: string | null;
+  /** Box whose full card is open under the stand map. */
+  declare selectedBoxId: string | null;
 
   private readonly format = new Formatter();
   private readonly themePreference = new ThemePreference();
@@ -365,6 +394,7 @@ export class SkuApp extends LitElement {
     this.actionError = null;
     this.editingLayout = false;
     this.placingBoxId = null;
+    this.selectedBoxId = null;
     this.tab = this.tabFromHash();
     this.theme = this.themePreference.current();
     this.themePreference.apply(this.theme);
@@ -405,6 +435,7 @@ export class SkuApp extends LitElement {
     this.addEventListener(DashboardEvents.SCALE_SETUP, this.handleScaleSetup);
     this.addEventListener(DashboardEvents.CANCEL_CALIBRATION, this.handleCancelCalibration);
     this.addEventListener(DashboardEvents.RELEASE_COMPONENT, this.handleReleaseComponent);
+    this.addEventListener(DashboardEvents.SELECT_BOX, this.handleSelectBox);
     this.addEventListener(DashboardEvents.PLACE_BOX, this.handlePlaceBox);
     this.addEventListener(DashboardEvents.PLACE_AT, this.handlePlaceAt);
     this.addEventListener(DashboardEvents.UNPLACE_BOX, this.handleUnplaceBox);
@@ -422,6 +453,7 @@ export class SkuApp extends LitElement {
     this.removeEventListener(DashboardEvents.SCALE_SETUP, this.handleScaleSetup);
     this.removeEventListener(DashboardEvents.CANCEL_CALIBRATION, this.handleCancelCalibration);
     this.removeEventListener(DashboardEvents.RELEASE_COMPONENT, this.handleReleaseComponent);
+    this.removeEventListener(DashboardEvents.SELECT_BOX, this.handleSelectBox);
     this.removeEventListener(DashboardEvents.PLACE_BOX, this.handlePlaceBox);
     this.removeEventListener(DashboardEvents.PLACE_AT, this.handlePlaceAt);
     this.removeEventListener(DashboardEvents.UNPLACE_BOX, this.handleUnplaceBox);
@@ -463,10 +495,19 @@ export class SkuApp extends LitElement {
     }
   };
 
+  private readonly handleSelectBox = (event: Event): void => {
+    this.selectedBoxId = (event as CustomEvent<string>).detail;
+    // On a phone the card opens below the map, out of sight
+    void this.updateComplete.then(() =>
+      this.renderRoot.querySelector(".box-detail")?.scrollIntoView({ block: "nearest", behavior: "smooth" }),
+    );
+  };
+
   /** The first box starts a stand right away; otherwise the stands show where the box can go. */
   private readonly handlePlaceBox = (event: Event): void => {
     const boxId = (event as CustomEvent<string>).detail;
     this.actionError = null;
+    this.selectedBoxId = boxId;
     if (location.hash !== "#boxes") {
       location.hash = "boxes";
     }
@@ -665,6 +706,7 @@ export class SkuApp extends LitElement {
   private renderStands() {
     const snapshot = this.snapshot;
     const placing = snapshot.boxes.find((item) => item.box.id === this.placingBoxId) ?? null;
+    const selected = this.selectedBox();
     return html`
       ${placing ? this.renderPlacing(placing) : nothing}
       ${snapshot.clusters.length
@@ -680,28 +722,57 @@ export class SkuApp extends LitElement {
             </button>
           </div>`
         : nothing}
-      ${repeat(
-        snapshot.clusters,
-        (item) => item.cluster.id,
-        (item) => html`<section>
-          <sku-stand-view .overview=${item} ?editing=${this.editingLayout} .placing=${placing}></sku-stand-view>
-        </section>`,
-      )}
-      ${snapshot.unplaced.length
-        ? html`<section>
-            <div class="section-title">
-              <h2>Не размещены<span class="count">${snapshot.unplaced.length}</span></h2>
-            </div>
-            <div class="boxes">
-              ${repeat(
-                snapshot.unplaced,
-                (item) => item.box.id,
-                (item) => html`<sku-box-card .overview=${item} ?moving=${item.box.id === this.placingBoxId}></sku-box-card>`,
-              )}
-            </div>
-          </section>`
-        : nothing}
+      <div class="stands-layout">
+        <div class="stands">
+          ${repeat(
+            snapshot.clusters,
+            (item) => item.cluster.id,
+            (item) => html`<section>
+              <sku-stand-view
+                .overview=${item}
+                ?editing=${this.editingLayout}
+                .placing=${placing}
+                .selectedBoxId=${selected?.box.id ?? null}
+              ></sku-stand-view>
+            </section>`,
+          )}
+          ${snapshot.unplaced.length
+            ? html`<section>
+                <div class="section-title">
+                  <h2>Не размещены<span class="count">${snapshot.unplaced.length}</span></h2>
+                </div>
+                <div class="mini-row">
+                  ${repeat(
+                    snapshot.unplaced,
+                    (item) => item.box.id,
+                    (item) => html`<sku-box-mini
+                      .overview=${item}
+                      ?selected=${item.box.id === selected?.box.id}
+                      ?moving=${item.box.id === this.placingBoxId}
+                    ></sku-box-mini>`,
+                  )}
+                </div>
+              </section>`
+            : nothing}
+        </div>
+        ${selected
+          ? html`<div class="box-detail">
+              <sku-box-card
+                .overview=${selected}
+                ?editing=${this.editingLayout}
+                ?moving=${selected.box.id === this.placingBoxId}
+              ></sku-box-card>
+            </div>`
+          : nothing}
+      </div>
     `;
+  }
+
+  /** The chosen box, or the first one on the map so the page never opens empty. */
+  private selectedBox(): BoxOverview | null {
+    const snapshot = this.snapshot;
+    const ordered = [...snapshot.clusters.flatMap((item) => item.boxes), ...snapshot.unplaced];
+    return ordered.find((item) => item.box.id === this.selectedBoxId) ?? ordered[0] ?? null;
   }
 
   private renderPlacing(placing: BoxOverview) {
@@ -711,7 +782,7 @@ export class SkuApp extends LitElement {
     return html`<div class="card placing">
       <div>
         <b>Где стоит бокс ${placing.name}?</b>
-        <span class="muted">Нажмите «+ Поставить сюда» рядом с боксом, к которому он пристыкован.</span>
+        <span class="muted">Нажмите «+ Сюда» рядом с боксом, к которому он пристыкован.</span>
       </div>
       <div class="buttons">
         ${alone

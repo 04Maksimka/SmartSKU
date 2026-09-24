@@ -14,8 +14,9 @@ interface Candidate {
 }
 
 /**
- * The stand as it stands, seen from the front: every box in its grid cell, rows counted bottom up. While a box is
- * being placed, the free cells next to the other boxes turn into "put it here" buttons.
+ * Map of the stand as it stands, seen from the front: every box in its grid cell as a small tile, rows counted bottom
+ * up, so a whole stand fits on a phone screen. While a box is being placed, the free cells next to the other boxes
+ * turn into "put it here" buttons.
  */
 export class StandView extends LitElement {
   private static readonly SIDES: { dx: number; dy: number; hint: string }[] = [
@@ -29,6 +30,7 @@ export class StandView extends LitElement {
     overview: { attribute: false },
     editing: { type: Boolean },
     placing: { attribute: false },
+    selectedBoxId: { attribute: false },
   };
 
   static override styles = [
@@ -42,8 +44,8 @@ export class StandView extends LitElement {
 
       .grid {
         display: grid;
-        grid-template-columns: repeat(var(--columns), minmax(min(320px, calc(100vw - 40px)), 460px));
-        gap: 12px;
+        grid-template-columns: repeat(var(--columns), minmax(140px, 190px));
+        gap: 8px;
       }
 
       .candidate {
@@ -52,12 +54,13 @@ export class StandView extends LitElement {
         align-items: center;
         justify-content: center;
         gap: 4px;
-        min-height: 180px;
+        min-height: 120px;
+        padding: 8px;
         border: 2px dashed var(--accent);
-        border-radius: var(--r, 14px);
+        border-radius: var(--r-sm, 9px);
         background: var(--accent-soft);
         color: var(--text);
-        font-size: 15px;
+        font-size: 13px;
       }
 
       .candidate small {
@@ -77,6 +80,7 @@ export class StandView extends LitElement {
   declare editing: boolean;
   /** Box being placed on a stand right now, or null. */
   declare placing: BoxOverview | null;
+  declare selectedBoxId: string | null;
 
   private readonly events = new DashboardEvents();
 
@@ -84,6 +88,7 @@ export class StandView extends LitElement {
     super();
     this.editing = false;
     this.placing = null;
+    this.selectedBoxId = null;
   }
 
   protected override render() {
@@ -109,12 +114,12 @@ export class StandView extends LitElement {
           ${repeat(
             boxes,
             (item) => item.box.id,
-            (item) => html`<sku-box-card
+            (item) => html`<sku-box-mini
               .overview=${item}
-              ?editing=${this.editing}
+              ?selected=${this.selectedBoxId === item.box.id}
               ?moving=${this.placing?.box.id === item.box.id}
               style=${place(item.box.grid_x ?? 0, item.box.grid_y ?? 0)}
-            ></sku-box-card>`,
+            ></sku-box-mini>`,
           )}
           ${candidates.map(
             (candidate) => html`<button
@@ -122,7 +127,7 @@ export class StandView extends LitElement {
               style=${place(candidate.x, candidate.y)}
               @click=${() => this.events.placeAt(this, { clusterId: cluster.id, x: candidate.x, y: candidate.y })}
             >
-              + Поставить сюда
+              + Сюда
               <small>${candidate.hint}</small>
             </button>`,
           )}
