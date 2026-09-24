@@ -9,6 +9,7 @@ import { Theme } from "./theme";
 export class ComponentTable extends LitElement {
   static override properties = {
     items: { attribute: false },
+    locateName: { attribute: false },
     query: { state: true },
   };
 
@@ -29,6 +30,16 @@ export class ComponentTable extends LitElement {
       td.qty strong {
         font-family: var(--mono);
         font-size: 15px;
+      }
+
+      tr.located td {
+        background: var(--accent-soft);
+      }
+
+      td.actions {
+        display: flex;
+        gap: 6px;
+        justify-content: flex-end;
       }
 
       /* Phone card: name and count on top, then where it lies, the piece weight and the tag */
@@ -59,15 +70,18 @@ export class ComponentTable extends LitElement {
           font-size: 12.5px;
         }
 
-        td.release {
+        td.actions {
           grid-column: 1 / -1;
           margin-top: 4px;
+          justify-content: flex-start;
         }
       }
     `,
   ];
 
   declare items: ComponentOverview[];
+  /** The component being looked for on the stands. */
+  declare locateName: string | null;
   declare query: string;
 
   private readonly format = new Formatter();
@@ -76,6 +90,7 @@ export class ComponentTable extends LitElement {
   constructor() {
     super();
     this.items = [];
+    this.locateName = null;
     this.query = "";
   }
 
@@ -117,8 +132,9 @@ export class ComponentTable extends LitElement {
   }
 
   private renderRow({ component, location }: ComponentOverview) {
+    const located = this.locateName !== null && this.key(component.name) === this.key(this.locateName);
     return html`
-      <tr>
+      <tr class=${located ? "located" : ""}>
         <td class="name-cell">
           <div class="name">${component.name}</div>
           ${component.tags.length
@@ -134,7 +150,14 @@ export class ComponentTable extends LitElement {
         </td>
         <td class="nfc mono muted">${component.nfc_id}</td>
         <td class="calibrated muted nowrap end" title="Калибровка">${this.format.moment(component.calibrated_at)}</td>
-        <td class="release nowrap end">
+        <td class="actions nowrap end">
+          <button
+            class="primary"
+            title="Подсветить на стенде все ячейки с этим компонентом, их дисплеи замигают"
+            @click=${() => this.events.locate(this, component.name)}
+          >
+            ${located ? "Ищем…" : "Найти"}
+          </button>
           <button
             class="danger"
             title="Забыть, что лежит в ячейке, чтобы откалибровать её заново"
@@ -149,6 +172,11 @@ export class ComponentTable extends LitElement {
         </td>
       </tr>
     `;
+  }
+
+  /** Same rule as the backend: case and extra spaces do not matter. */
+  private key(name: string): string {
+    return name.trim().split(/\s+/).join(" ").toLocaleLowerCase("ru");
   }
 
   private filtered(): ComponentOverview[] {

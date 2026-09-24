@@ -2,10 +2,11 @@ import { LitElement, css, html, nothing } from "lit";
 
 import { DashboardEvents } from "../app/dashboard-events";
 import type { BoxOverview, LockerOverview } from "../app/dashboard-store";
+import { AssemblyScreen } from "../app/assembly-screen";
 import { Formatter } from "../app/formatter";
 import { Theme } from "./theme";
 
-type SlotTone = "counted" | "idle" | "out" | "busy" | "warn";
+type SlotTone = "counted" | "idle" | "out" | "busy" | "warn" | "take" | "put" | "done" | "dark";
 
 /**
  * A box on the stand map: its address and the four slots with their counts, small enough to see a whole stand at
@@ -154,6 +155,66 @@ export class BoxMini extends LitElement {
       .slot.warn .count {
         color: var(--tone-warn);
       }
+
+      /* Assembly: the slots to take from stand out, the others are dark like their displays */
+      .slot.take {
+        background: var(--accent-soft);
+        box-shadow: inset 0 0 0 2px var(--accent);
+      }
+
+      .slot.put {
+        background: var(--tone-bad-bg);
+        box-shadow: inset 0 0 0 2px var(--tone-bad);
+      }
+
+      .slot.put .count {
+        color: var(--tone-bad);
+      }
+
+      .slot.done {
+        background: var(--tone-good-bg);
+      }
+
+      .slot.done .count {
+        color: var(--tone-good);
+      }
+
+      .slot.dark {
+        opacity: 0.4;
+      }
+
+      button.box.idle-in-assembly,
+      button.box.not-found {
+        opacity: 0.55;
+      }
+
+      /* Search: the box and the slots holding the component pulse like their blinking displays */
+      button.box.found {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 2px var(--accent-soft);
+      }
+
+      .slot.found {
+        background: var(--accent-soft);
+        box-shadow: inset 0 0 0 2px var(--accent);
+      }
+
+      .slot.not-found {
+        opacity: 0.4;
+      }
+
+      @media (prefers-reduced-motion: no-preference) {
+        .slot.found {
+          animation: found 0.8s steps(1, end) infinite;
+        }
+      }
+
+      @keyframes found {
+        50% {
+          box-shadow: inset 0 0 0 2px transparent;
+          background: transparent;
+        }
+      }
     `,
   ];
 
@@ -165,6 +226,7 @@ export class BoxMini extends LitElement {
 
   private readonly format = new Formatter();
   private readonly events = new DashboardEvents();
+  private readonly screen = new AssemblyScreen();
 
   constructor() {
     super();
@@ -176,8 +238,17 @@ export class BoxMini extends LitElement {
   protected override render() {
     const { box, lockers, columns } = this.overview;
     const title = box.alias ?? (box.address ? box.hardware_id : "не размещён");
+    // During an assembly a box with nothing to take from fades out, so the way through the stand is plain
+    const idle = lockers.some((item) => item.assembly) && !lockers.some((item) => item.assembly?.pick);
+    const search = lockers.some((item) => item.search === "match")
+      ? "found"
+      : lockers.some((item) => item.search === "other")
+        ? "not-found"
+        : "";
     return html`<button
-      class="box ${this.selected ? "selected" : ""} ${this.moving ? "moving" : ""} ${this.arranging ? "arranging" : ""}"
+      class="box ${this.selected ? "selected" : ""} ${this.moving ? "moving" : ""} ${this.arranging
+        ? "arranging"
+        : ""} ${idle ? "idle-in-assembly" : ""} ${search}"
       aria-pressed=${this.selected ? "true" : "false"}
       @click=${() => this.events.selectBox(this, box.id)}
     >
@@ -197,14 +268,23 @@ export class BoxMini extends LitElement {
   private renderSlot(item: LockerOverview | null, lockerId: number) {
     const [tone, count, label] = item ? this.describe(item) : (["out", "·", "нет данных"] as const);
     const slot = this.format.slot(lockerId);
-    return html`<span class="slot ${tone}" title="Слот ${slot}: ${label}">
+    const search = item?.search === "match" ? "found" : item?.search === "other" ? "not-found" : "";
+    return html`<span class="slot ${tone} ${search}" title="Слот ${slot}: ${label}">
       <span class="count">${count}</span>
       ${label ? html`<span class="label">${label}</span>` : nothing}
     </span>`;
   }
 
   /** What a person at the rack cares about: how many pieces and of what, or why there is no count. */
-  private describe({ locker, pendingCalibration }: LockerOverview): [SlotTone, string, string] {
+  private describe({ locker, pendingCalibration, assembly }: LockerOverview): [SlotTone, string, string] {
+    if (assembly) {
+      const pick = assembly.pick;
+      if (pick === null) {
+        return ["dark", "", locker.component?.name ?? ""];
+      }
+      const state = this.screen.state(pick);
+      return [state, state === "done" ? "✓" : this.screen.text(pick).replace(/ +/, " "), pick.component_name];
+    }
     if (locker.calibration || pendingCalibration) {
       return ["busy", "…", "калибровка"];
     }

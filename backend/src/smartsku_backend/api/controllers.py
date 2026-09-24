@@ -4,6 +4,10 @@ from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import APIRouter, Query, status
 
 from smartsku_backend.api.schemas import (
+    AssemblyPickSchema,
+    AssemblyRequest,
+    AssemblySchema,
+    AvailabilitySchema,
     BoxClaimRequest,
     BoxPlacementRequest,
     BoxRenameRequest,
@@ -15,18 +19,28 @@ from smartsku_backend.api.schemas import (
     ClusterSchema,
     ComponentSchema,
     InventoryEventSchema,
+    ItemAvailabilitySchema,
+    LocateRequest,
+    LocateSchema,
     LockerSchema,
     OnboardingSettingsSchema,
     ScaleRequest,
     ScaleResultSchema,
+    SpecificationItemSchema,
+    SpecificationRequest,
+    SpecificationSchema,
+    StockCellSchema,
 )
 from smartsku_backend.config import OnboardingConfig
 from smartsku_backend.db.models import CalibrationStatus
+from smartsku_backend.services.assembly import AssemblyService, AssemblyView
 from smartsku_backend.services.calibration import CalibrationService
 from smartsku_backend.services.inventory import ComponentService, InventoryQueryService
 from smartsku_backend.services.layout import LayoutService
+from smartsku_backend.services.locate import LocateService, LocateView
 from smartsku_backend.services.provisioning import ProvisioningService
 from smartsku_backend.services.scale import ScaleService
+from smartsku_backend.services.specifications import SpecificationLine, SpecificationService, SpecificationView
 
 
 class BoxesController:
@@ -214,4 +228,186 @@ class OnboardingController:
             broker_tls=config.broker_tls,
             broker_username=config.box_username,
             broker_password=config.box_password,
+        )
+
+
+class SpecificationsController:
+    """Products and the components one piece of each takes."""
+
+    def __init__(self) -> None:
+        self.router = APIRouter(prefix="/api/specifications", tags=["assembly"], route_class=DishkaRoute)
+        self.router.add_api_route(
+            "", self.list_specifications, methods=["GET"], response_model=list[SpecificationSchema]
+        )
+        self.router.add_api_route(
+            "", self.create, methods=["POST"], response_model=SpecificationSchema, status_code=status.HTTP_201_CREATED
+        )
+        self.router.add_api_route(
+            "/{specification_id}", self.update, methods=["PUT"], response_model=SpecificationSchema
+        )
+        self.router.add_api_route(
+            "/{specification_id}", self.delete, methods=["DELETE"], status_code=status.HTTP_204_NO_CONTENT
+        )
+        self.router.add_api_route(
+            "/{specification_id}/availability",
+            self.availability,
+            methods=["GET"],
+            response_model=AvailabilitySchema,
+        )
+
+    async def list_specifications(self, specifications: FromDishka[SpecificationService]) -> list[SpecificationSchema]:
+        return [self._schema(view) for view in await specifications.all()]
+
+    async def create(
+        self, request: SpecificationRequest, specifications: FromDishka[SpecificationService]
+    ) -> SpecificationSchema:
+        return self._schema(await specifications.create(request.name, self._lines(request)))
+
+    async def update(
+        self, specification_id: int, request: SpecificationRequest, specifications: FromDishka[SpecificationService]
+    ) -> SpecificationSchema:
+        return self._schema(await specifications.update(specification_id, request.name, self._lines(request)))
+
+    async def delete(self, specification_id: int, specifications: FromDishka[SpecificationService]) -> None:
+        await specifications.delete(specification_id)
+
+    async def availability(
+        self,
+        specification_id: int,
+        assemblies: FromDishka[AssemblyService],
+        kits: Annotated[int, Query(gt=0, le=1000)] = 1,
+    ) -> AvailabilitySchema:
+        """Whether the stands hold enough for this many products, and which cells an assembly would take from."""
+        report = await assemblies.availability(specification_id, kits)
+        return AvailabilitySchema(
+            specification_id=report.specification_id,
+            name=report.name,
+            kits=report.kits,
+            ok=report.ok,
+            items=[
+                ItemAvailabilitySchema(
+                    component_name=item.component_name,
+                    required=item.required,
+                    available=item.available,
+                    missing=item.missing,
+                    elsewhere=item.elsewhere,
+                    cells=[
+                        StockCellSchema(
+                            box_id=cell.state.box_id,
+                            locker_id=cell.state.locker_id,
+                            nfc_id=cell.component.nfc_id,
+                            quantity=cell.quantity,
+                        )
+                        for cell in item.cells
+                        if cell.state is not None
+                    ],
+                )
+                for item in report.items
+            ],
+        )
+
+    def _lines(self, request: SpecificationRequest) -> list[SpecificationLine]:
+        return [SpecificationLine(item.component_name, item.quantity) for item in request.items]
+
+    def _schema(self, view: SpecificationView) -> SpecificationSchema:
+        specification = view.specification
+        return SpecificationSchema(
+            id=specification.id,
+            name=specification.name,
+            items=[SpecificationItemSchema.model_validate(item) for item in view.items],
+            created_at=specification.created_at,
+            updated_at=specification.updated_at,
+        )
+
+
+class AssembliesController:
+    """Assembling by a specification: the displays of the stands guide the picking, the journal records it."""
+
+    def __init__(self) -> None:
+        self.router = APIRouter(prefix="/api/assemblies", tags=["assembly"], route_class=DishkaRoute)
+        self.router.add_api_route("", self.list_assemblies, methods=["GET"], response_model=list[AssemblySchema])
+        self.router.add_api_route(
+            "", self.start, methods=["POST"], response_model=AssemblySchema, status_code=status.HTTP_201_CREATED
+        )
+        self.router.add_api_route("/{assembly_id}", self.cancel, methods=["DELETE"], response_model=AssemblySchema)
+
+    async def list_assemblies(
+        self, assemblies: FromDishka[AssemblyService], limit: Annotated[int, Query(ge=1, le=200)] = 20
+    ) -> list[AssemblySchema]:
+        """Newest first, with the progress of each cell."""
+        return [self._schema(view) for view in await assemblies.recent(limit)]
+
+    async def start(self, request: AssemblyRequest, assemblies: FromDishka[AssemblyService]) -> AssemblySchema:
+        """409 with the missing components when the stock is short, or when another assembly runs."""
+        return self._schema(await assemblies.start(request.specification_id, request.kits))
+
+    async def cancel(self, assembly_id: int, assemblies: FromDishka[AssemblyService]) -> AssemblySchema:
+        """Stops the assembly: the displays go back to counting."""
+        return self._schema(await assemblies.cancel(assembly_id))
+
+    def _schema(self, view: AssemblyView) -> AssemblySchema:
+        assembly = view.assembly
+        return AssemblySchema(
+            id=assembly.id,
+            specification_id=assembly.specification_id,
+            name=assembly.name,
+            kits=assembly.kits,
+            status=assembly.status,
+            started_at=assembly.started_at,
+            finished_at=assembly.finished_at,
+            picks=[
+                AssemblyPickSchema(
+                    component_name=item.pick.component_name,
+                    nfc_id=item.pick.nfc_id,
+                    box_id=item.pick.box_id,
+                    locker_id=item.pick.locker_id,
+                    quantity=item.pick.quantity,
+                    start_quantity=item.pick.start_quantity,
+                    current_quantity=item.quantity,
+                    taken=item.taken,
+                    remaining=item.remaining,
+                    inserted=item.inserted,
+                )
+                for item in view.picks
+            ],
+        )
+
+
+class LocateController:
+    """Finding a component on the stands: its cells light up on the dashboard and their displays blink."""
+
+    def __init__(self) -> None:
+        self.router = APIRouter(prefix="/api/locate", tags=["locate"], route_class=DishkaRoute)
+        self.router.add_api_route("", self.current, methods=["GET"], response_model=LocateSchema | None)
+        self.router.add_api_route("", self.start, methods=["POST"], response_model=LocateSchema)
+        self.router.add_api_route("", self.stop, methods=["DELETE"], status_code=status.HTTP_204_NO_CONTENT)
+
+    async def current(self, locate: FromDishka[LocateService]) -> LocateSchema | None:
+        """The component being looked for now, or null."""
+        view = await locate.current()
+        return self._schema(view) if view is not None else None
+
+    async def start(self, request: LocateRequest, locate: FromDishka[LocateService]) -> LocateSchema:
+        """Blinks the displays of every cell holding this component (by name) for locate.seconds; 404 — no such
+        component. A new search replaces the previous one."""
+        return self._schema(await locate.start(request.component_name.strip()))
+
+    async def stop(self, locate: FromDishka[LocateService]) -> None:
+        locate.stop()
+
+    def _schema(self, view: LocateView) -> LocateSchema:
+        return LocateSchema(
+            component_name=view.name,
+            seconds_left=round(view.seconds_left, 1),
+            cells=[
+                StockCellSchema(
+                    box_id=cell.state.box_id,
+                    locker_id=cell.state.locker_id,
+                    nfc_id=cell.component.nfc_id,
+                    quantity=cell.quantity,
+                )
+                for cell in view.cells
+                if cell.state is not None
+            ],
+            elsewhere=view.elsewhere,
         )

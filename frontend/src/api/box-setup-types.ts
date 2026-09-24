@@ -7,7 +7,6 @@ export interface BoxLockerHardware {
   load_cell: boolean;
   nfc_reader: boolean;
   display: boolean;
-  led: boolean;
   /** The box knows the empty slot reading and the load cell direction. */
   slot_ready: boolean;
   /** NFC tag of the inserted cell, empty when the slot is empty. */

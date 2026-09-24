@@ -150,6 +150,11 @@ class InventoryEventType(StrEnum):
     SLOT_SCALED = "slot_scaled"
     CELL_TARED = "cell_tared"
     SCALE_FAILED = "scale_failed"
+    # One record per order, not tied to a box: the start and the end (note — what and how many); records of the cells
+    # changed during the assembly carry its assembly_id
+    ASSEMBLY_STARTED = "assembly_started"
+    ASSEMBLY_COMPLETED = "assembly_completed"
+    ASSEMBLY_CANCELLED = "assembly_cancelled"
 
 
 class InventoryEvent(Base):
@@ -159,8 +164,9 @@ class InventoryEvent(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     event_type: Mapped[InventoryEventType] = mapped_column(Enum(InventoryEventType, native_enum=False, length=32))
-    box_id: Mapped[str] = mapped_column(ForeignKey("boxes.id"))
-    locker_id: Mapped[int] = mapped_column(Integer)
+    # Null for the records of a whole assembly order
+    box_id: Mapped[str | None] = mapped_column(ForeignKey("boxes.id"))
+    locker_id: Mapped[int | None] = mapped_column(Integer)
     nfc_id: Mapped[str | None] = mapped_column(String(64))
     component_name: Mapped[str | None] = mapped_column(String(255))
     weight: Mapped[float] = mapped_column(Float)
@@ -168,6 +174,8 @@ class InventoryEvent(Base):
     quantity_after: Mapped[int | None] = mapped_column(Integer)
     # Human-readable detail, e.g. why the box could not set up the load cell
     note: Mapped[str | None] = mapped_column(String(255))
+    # The assembly the record belongs to: its start and end, and cell records made while it ran
+    assembly_id: Mapped[int | None] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=lambda: datetime.now(UTC))
 
     @property
@@ -175,3 +183,78 @@ class InventoryEvent(Base):
         if self.quantity_before is None or self.quantity_after is None:
             return None
         return self.quantity_after - self.quantity_before
+
+
+class Specification(Base):
+    """A product and the components one piece of it takes, e.g. a table: 20 screws, 10 nuts."""
+
+    __tablename__ = "specifications"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(255))
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=lambda: datetime.now(UTC))
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime, default=lambda: datetime.now(UTC))
+
+
+class SpecificationItem(Base):
+    """A line of a specification. Components are named, not bound to cells: the same component may lie in several
+    cells, and a cell calibrated anew under the same name still fits."""
+
+    __tablename__ = "specification_items"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    specification_id: Mapped[int] = mapped_column(ForeignKey("specifications.id", ondelete="CASCADE"))
+    position: Mapped[int] = mapped_column(Integer)
+    component_name: Mapped[str] = mapped_column(String(255))
+    quantity: Mapped[int] = mapped_column(Integer)
+
+
+class AssemblyStatus(StrEnum):
+    ACTIVE = "active"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
+
+
+class Assembly(Base):
+    """Picking the components of a specification from the stands; only one runs at a time, since it takes over
+    the displays of all boxes."""
+
+    __tablename__ = "assemblies"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    # Null once the specification is deleted; its name stays
+    specification_id: Mapped[int | None] = mapped_column(
+        ForeignKey("specifications.id", ondelete="SET NULL"), nullable=True
+    )
+    name: Mapped[str] = mapped_column(String(255))
+    # How many products are assembled at once: every line of the specification is multiplied by it
+    kits: Mapped[int] = mapped_column(Integer, default=1)
+    status: Mapped[AssemblyStatus] = mapped_column(
+        Enum(AssemblyStatus, native_enum=False, length=16), default=AssemblyStatus.ACTIVE
+    )
+    started_at: Mapped[datetime] = mapped_column(UtcDateTime, default=lambda: datetime.now(UTC))
+    finished_at: Mapped[datetime | None] = mapped_column(UtcDateTime)
+
+
+class AssemblyPick(Base):
+    """How many pieces to take from one cell. The cell is found by its NFC tag; box_id and locker_id follow it
+    if it is put back into another slot."""
+
+    __tablename__ = "assembly_picks"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    assembly_id: Mapped[int] = mapped_column(ForeignKey("assemblies.id", ondelete="CASCADE"))
+    component_name: Mapped[str] = mapped_column(String(255))
+    nfc_id: Mapped[str] = mapped_column(String(64))
+    box_id: Mapped[str] = mapped_column(ForeignKey("boxes.id"))
+    locker_id: Mapped[int] = mapped_column(Integer)
+    # Pieces to take
+    quantity: Mapped[int] = mapped_column(Integer)
+    # Pieces in the cell when the assembly started: taken = start_quantity - what is there now
+    start_quantity: Mapped[int] = mapped_column(Integer)
+    # Pieces in the cell when the assembly ended, null while it runs
+    final_quantity: Mapped[int | None] = mapped_column(Integer)
+
+    def remaining(self, quantity: int) -> int:
+        """Pieces still to take with this many in the cell; negative — taken too many, put them back."""
+        return self.quantity - (self.start_quantity - quantity)

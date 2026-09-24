@@ -9,11 +9,14 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from smartsku_backend.api.controllers import (
+    AssembliesController,
     BoxesController,
     CalibrationController,
     ComponentsController,
     LayoutController,
+    LocateController,
     OnboardingController,
+    SpecificationsController,
 )
 from smartsku_backend.config import AppConfig, MqttConfig
 from smartsku_backend.db.database import Database
@@ -37,6 +40,9 @@ class ApplicationFactory:
             CalibrationController(),
             ComponentsController(),
             OnboardingController(),
+            SpecificationsController(),
+            AssembliesController(),
+            LocateController(),
         )
         for controller in controllers:
             app.include_router(controller.router)

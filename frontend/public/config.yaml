@@ -5,8 +5,10 @@ api_base_url: ""
 refresh_interval_ms: 1000
 # How many latest inventory events the log keeps
 events_limit: 200
-# How many latest calibrations are listed
+# How many latest calibrations the dashboard keeps to follow the running ones (the history is in the journal)
 calibrations_limit: 20
+# How many latest assemblies the "Сборка" tab lists
+assemblies_limit: 20
 # Slots on a box card are laid out like in the real box, seen from the front: locker_id 0, 1, ... left to right,
 # top to bottom, this many per row. The prototype box is 2x2: slots 1 2 / 3 4 (labels are locker_id + 1)
 box_columns: 2

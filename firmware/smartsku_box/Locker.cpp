@@ -9,8 +9,7 @@ Locker::Locker(uint8_t lockerId, const LockerHardware &hardware, BoxStorage &sto
     storage_(storage),
     loadCellBus_(loadCellBus),
     nfc_(hardware.rfidSs),
-    display_(AppConfig::DISPLAY_CLK, hardware.displayDio),
-    led_(hardware.ledRed, hardware.ledGreen) {}
+    display_(AppConfig::DISPLAY_CLK, hardware.displayDio) {}
 
 void Locker::deselectNfc() {
   nfc_.deselect();
@@ -18,7 +17,6 @@ void Locker::deselectNfc() {
 
 void Locker::begin() {
   display_.begin(AppConfig::DISPLAY_BRIGHTNESS);
-  led_.begin();
   loadCellBus_.attach(hardware_.hxDout, loadCell_);
   loadCell_.begin();
   nfc_.begin(id_);
@@ -37,6 +35,11 @@ void Locker::update() {
   }
   if (resultShown_ && millis() - resultShownAtMs_ >= AppConfig::RESULT_SHOW_MS) {
     resultShown_ = false;
+    refreshDisplay();
+  }
+  bool hidden = screenBlink_ && (millis() / AppConfig::DISPLAY_BLINK_MS) % 2 == 1;
+  if (hidden != blinkHidden_) {
+    blinkHidden_ = hidden;
     refreshDisplay();
   }
 }
@@ -423,12 +426,26 @@ bool Locker::takeResult(JsonObject event) {
   return true;
 }
 
-bool Locker::applyIndicators(const String &ledColor, bool hasNumber, int screenNumber) {
+Locker::ScreenMode Locker::parseScreenMode(const String &name) {
+  if (name == "off") {
+    return ScreenMode::Off;
+  }
+  if (name == "take") {
+    return ScreenMode::Take;
+  }
+  if (name == "put") {
+    return ScreenMode::Put;
+  }
+  return ScreenMode::Count;
+}
+
+void Locker::applyIndicators(ScreenMode mode, bool hasNumber, int screenNumber, bool blink) {
   hasScreenCommand_ = true;
+  screenBlink_ = blink;
+  screenMode_ = mode;
   screenBlank_ = !hasNumber;
   screenNumber_ = screenNumber;
   refreshDisplay();
-  return led_.apply(ledColor);
 }
 
 void Locker::setBackendOnline(bool online) {
@@ -473,7 +490,12 @@ void Locker::refreshDisplay() {
     return;
   }
   if (backendOnline_ && hasScreenCommand_) {
-    if (screenBlank_) {
+    if (screenMode_ == ScreenMode::Off || (screenBlink_ && blinkHidden_)) {
+      display_.showBlank();
+    } else if (screenMode_ == ScreenMode::Take || screenMode_ == ScreenMode::Put) {
+      display_.showTask(screenMode_ == ScreenMode::Take ? CountDisplay::LETTER_TAKE : CountDisplay::LETTER_PUT,
+                        screenNumber_);
+    } else if (screenBlank_) {
       display_.showDashes();
     } else {
       display_.showNumber(screenNumber_);
@@ -573,7 +595,6 @@ void Locker::fillHardwareInfo(JsonObject info) const {
   info["load_cell"] = hardware_.hxDout >= 0 && windowReady_ && !loadCell_.failed();
   info["nfc_reader"] = nfc_.chipFound();
   info["display"] = AppConfig::DISPLAY_CLK >= 0 && hardware_.displayDio >= 0;
-  info["led"] = hardware_.ledRed >= 0 || hardware_.ledGreen >= 0;
   info["slot_ready"] = slotReady();
   info["cell"] = nfc_.present() ? nfc_.uid() : String();
 }

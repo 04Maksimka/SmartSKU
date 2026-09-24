@@ -179,10 +179,20 @@ export class EventLog extends LitElement {
           ${item.note ? html`<div class="note muted">${item.note}</div>` : nothing}
         </td>
         <td class="component">
+          ${item.box_id === null
+            ? html`<span class="muted">весь заказ</span>`
+            : nothing}
           ${item.component_name ?? (item.nfc_id ? html`<span class="muted">не откалибрована</span>` : nothing)}
           ${item.nfc_id ? html`<div class="muted mono">${item.nfc_id}</div>` : nothing}
         </td>
-        <td class="where nowrap">${this.format.location(this.boxNames.get(item.box_id) ?? item.box_id, item.locker_id)}</td>
+        <td class="where nowrap">
+          ${item.box_id === null || item.locker_id === null
+            ? html`<span class="muted">—</span>`
+            : this.format.location(this.boxNames.get(item.box_id) ?? item.box_id, item.locker_id)}
+          ${item.assembly_id !== null && item.box_id !== null
+            ? html`<div class="muted">сборка №${item.assembly_id}</div>`
+            : nothing}
+        </td>
         <td class="qty num end ${item.quantity_before === null && item.quantity_after === null ? "phone-hidden" : ""}">
           ${this.renderChange(item)}
         </td>
@@ -213,7 +223,7 @@ export class EventLog extends LitElement {
         (!this.boxFilter || item.box_id === this.boxFilter) &&
         (!this.typeFilter || item.event_type === this.typeFilter) &&
         (!query ||
-          [item.component_name, item.nfc_id].some((value) => value?.toLowerCase().includes(query) ?? false)),
+          [item.component_name, item.nfc_id, item.note].some((value) => value?.toLowerCase().includes(query) ?? false)),
     );
   }
 }

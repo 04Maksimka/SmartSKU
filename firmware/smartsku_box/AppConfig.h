@@ -9,14 +9,12 @@ struct LockerHardware {
   int8_t hxDout;
   int8_t displayDio;
   int8_t rfidSs;
-  int8_t ledRed;
-  int8_t ledGreen;
 };
 
 // Настройки прошивки. Сеть и адрес брокера задаются с фронта по Bluetooth и хранятся в NVS (см. NetworkSettings)
 struct AppConfig {
   // Показывается на фронте при подключении бокса
-  static constexpr const char *FIRMWARE_VERSION = "0.8.2";
+  static constexpr const char *FIRMWARE_VERSION = "0.10.0";
   static constexpr unsigned long SERIAL_BAUD = 115200;
   // Встроенный светодиод платы: мигает, пока нет связи с брокером; горит, когда бокс работает
   static constexpr int STATUS_LED_PIN = 2;
@@ -147,17 +145,17 @@ struct AppConfig {
   static constexpr unsigned long RESULT_SHOW_MS = 2500;
 
   static constexpr uint8_t DISPLAY_BRIGHTNESS = 3;
+  // Поиск компонента с фронта (indicators.blink): дисплей горит и гаснет каждые столько мс, показывая то же число
+  static constexpr unsigned long DISPLAY_BLINK_MS = 400;
 
   static constexpr const char *STORAGE_NAMESPACE = "smartsku";
 
   static constexpr uint8_t LOCKER_COUNT = 4;
   // Индекс в массиве = locker_id (лоток 1 на плате — locker 0). Схема из four_tray_hardware_test.ino.
-  // Светодиоды висят на расширителе PCF8575 (I2C: SDA 4, SCL 15, адрес 0x20) и пока не используются:
-  // после включения его выходы в HIGH, светодиоды с общим анодом не горят
   static constexpr LockerHardware LOCKERS[LOCKER_COUNT] = {
-    {.hxDout = 36, .displayDio = 25, .rfidSs = 19, .ledRed = -1, .ledGreen = -1},
-    {.hxDout = 39, .displayDio = 26, .rfidSs = 18, .ledRed = -1, .ledGreen = -1},
-    {.hxDout = 34, .displayDio = 27, .rfidSs = 5, .ledRed = -1, .ledGreen = -1},
-    {.hxDout = 35, .displayDio = 14, .rfidSs = 17, .ledRed = -1, .ledGreen = -1},
+    {.hxDout = 36, .displayDio = 25, .rfidSs = 19},
+    {.hxDout = 39, .displayDio = 26, .rfidSs = 18},
+    {.hxDout = 34, .displayDio = 27, .rfidSs = 5},
+    {.hxDout = 35, .displayDio = 14, .rfidSs = 17},
   };
 };

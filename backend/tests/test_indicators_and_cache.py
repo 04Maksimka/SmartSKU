@@ -1,13 +1,13 @@
 from smartsku_backend.db.models import Component
-from smartsku_backend.messaging.contracts import LedColor, LockerReading
+from smartsku_backend.messaging.contracts import LockerReading
 from smartsku_backend.services.indicators import IndicatorPolicy
 from smartsku_backend.services.runtime_cache import LockerRuntimeCache
 
 
 class TestIndicatorPolicy:
-    def test_display_shows_quantity_and_led_stays_off(self) -> None:
+    def test_display_shows_quantity(self) -> None:
         command = IndicatorPolicy().build("box", 0, True, 3)
-        assert (command.led_color, command.screen_number) == (LedColor.NONE, 3)
+        assert command.screen_number == 3
 
     def test_removed_or_uncalibrated_cell_shows_dashes(self) -> None:
         policy = IndicatorPolicy()

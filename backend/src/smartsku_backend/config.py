@@ -64,6 +64,11 @@ class LayoutConfig(BaseModel):
     cluster_name_prefix: str = "Стенд"
 
 
+class LocateConfig(BaseModel):
+    # How long the displays of a component's cells blink after "Найти" on the dashboard
+    seconds: float = 60
+
+
 class LoggingConfig(BaseModel):
     level: str
 
@@ -76,6 +81,7 @@ class AppConfig(BaseModel):
     scale: ScaleConfig = ScaleConfig()
     onboarding: OnboardingConfig
     layout: LayoutConfig = LayoutConfig()
+    locate: LocateConfig = LocateConfig()
     logging: LoggingConfig
 
 
