@@ -423,8 +423,22 @@ bool Locker::takeResult(JsonObject event) {
   return true;
 }
 
-bool Locker::applyIndicators(const String &ledColor, bool hasNumber, int screenNumber) {
+Locker::ScreenMode Locker::parseScreenMode(const String &name) {
+  if (name == "off") {
+    return ScreenMode::Off;
+  }
+  if (name == "take") {
+    return ScreenMode::Take;
+  }
+  if (name == "put") {
+    return ScreenMode::Put;
+  }
+  return ScreenMode::Count;
+}
+
+bool Locker::applyIndicators(const String &ledColor, ScreenMode mode, bool hasNumber, int screenNumber) {
   hasScreenCommand_ = true;
+  screenMode_ = mode;
   screenBlank_ = !hasNumber;
   screenNumber_ = screenNumber;
   refreshDisplay();
@@ -473,7 +487,12 @@ void Locker::refreshDisplay() {
     return;
   }
   if (backendOnline_ && hasScreenCommand_) {
-    if (screenBlank_) {
+    if (screenMode_ == ScreenMode::Off) {
+      display_.showBlank();
+    } else if (screenMode_ == ScreenMode::Take || screenMode_ == ScreenMode::Put) {
+      display_.showTask(screenMode_ == ScreenMode::Take ? CountDisplay::LETTER_TAKE : CountDisplay::LETTER_PUT,
+                        screenNumber_);
+    } else if (screenBlank_) {
       display_.showDashes();
     } else {
       display_.showNumber(screenNumber_);

@@ -1,7 +1,7 @@
 import { LitElement, css, html, nothing } from "lit";
 import { repeat } from "lit/directives/repeat.js";
 
-import type { Calibration, Cluster } from "../api/types";
+import type { Assembly, Calibration, Cluster } from "../api/types";
 import type { CommandService } from "../app/command-service";
 import {
   DashboardEvents,
@@ -17,13 +17,14 @@ import type { CalibrationDialog } from "./calibration-dialog";
 import type { ScaleSetupDialog } from "./scale-setup-dialog";
 import { Theme } from "./theme";
 
-type Tab = "boxes" | "components" | "journal";
+type Tab = "boxes" | "components" | "assembly" | "journal";
 
 export class SkuApp extends LitElement {
   /** Tabs of the dashboard; the chosen one lives in the URL hash, so a reload or a link keeps it. */
   private static readonly TABS: { id: Tab; label: string }[] = [
     { id: "boxes", label: "Склад" },
     { id: "components", label: "Компоненты" },
+    { id: "assembly", label: "Сборка" },
     { id: "journal", label: "Журнал" },
   ];
 
@@ -134,6 +135,36 @@ export class SkuApp extends LitElement {
         color: var(--muted);
       }
 
+      .tabs .live {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--accent);
+        box-shadow: 0 0 0 3px var(--accent-soft);
+      }
+
+      /* A running assembly is visible from every tab: it has taken over the displays of the boxes */
+      .assembly-banner {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 10px 16px;
+        margin-bottom: 20px;
+        padding: 12px 14px;
+        border: 2px solid var(--accent);
+        background: var(--accent-soft);
+      }
+
+      .assembly-banner .buttons {
+        display: flex;
+        gap: 8px;
+      }
+
+      .assembly-banner strong {
+        font-family: var(--mono);
+      }
+
       .theme-switch {
         width: 34px;
         height: 34px;
@@ -185,7 +216,7 @@ export class SkuApp extends LitElement {
         .tabs a {
           flex: 1;
           justify-content: center;
-          padding: 8px 6px;
+          padding: 8px 4px;
         }
 
         .actions-inline {
@@ -440,6 +471,7 @@ export class SkuApp extends LitElement {
     this.addEventListener(DashboardEvents.PLACE_BOX, this.handlePlaceBox);
     this.addEventListener(DashboardEvents.PLACE_AT, this.handlePlaceAt);
     this.addEventListener(DashboardEvents.RENAME_CLUSTER, this.handleRenameCluster);
+    this.addEventListener(DashboardEvents.CANCEL_ASSEMBLY, this.handleCancelAssembly);
     window.addEventListener("hashchange", this.handleHashChange);
     window.addEventListener("keydown", this.handleKeydown);
   }
@@ -458,6 +490,18 @@ export class SkuApp extends LitElement {
     this.removeEventListener(DashboardEvents.PLACE_BOX, this.handlePlaceBox);
     this.removeEventListener(DashboardEvents.PLACE_AT, this.handlePlaceAt);
     this.removeEventListener(DashboardEvents.RENAME_CLUSTER, this.handleRenameCluster);
+    this.removeEventListener(DashboardEvents.CANCEL_ASSEMBLY, this.handleCancelAssembly);
+  }
+
+  private readonly handleCancelAssembly = (event: Event): void => {
+    this.cancelAssembly((event as CustomEvent<Assembly>).detail);
+  };
+
+  private cancelAssembly(assembly: Assembly): void {
+    const title = this.format.assemblyTitle(assembly.name, assembly.kits);
+    if (confirm(`Прервать сборку «${title}»? Дисплеи вернутся к обычному режиму, в журнал запишется, сколько взяли.`)) {
+      void this.run(() => this.commands.cancelAssembly(assembly.id));
+    }
   }
 
   private readonly handleCalibrate = (event: Event): void => {
@@ -614,6 +658,7 @@ export class SkuApp extends LitElement {
     const counts: Record<Tab, number | null> = {
       boxes: null,
       components: this.snapshot.components.length,
+      assembly: null,
       journal: null,
     };
     return html`
@@ -621,6 +666,9 @@ export class SkuApp extends LitElement {
         ${SkuApp.TABS.map(
           (tab) => html`<a href="#${tab.id}" aria-current=${tab.id === this.tab ? "page" : "false"}>
             ${tab.label}${counts[tab.id] ? html`<span class="badge">${counts[tab.id]}</span>` : nothing}
+            ${tab.id === "assembly" && this.snapshot.activeAssembly
+              ? html`<span class="live" title="Идёт сборка"></span>`
+              : nothing}
           </a>`,
         )}
       </nav>
@@ -660,6 +708,7 @@ export class SkuApp extends LitElement {
       ${snapshot.error
         ? html`<div class="error">Не удалось обновить данные: ${snapshot.error}. Показаны последние полученные.</div>`
         : nothing}
+      ${this.renderAssemblyBanner()}
 
       ${this.renderTab()}
 
@@ -680,9 +729,37 @@ export class SkuApp extends LitElement {
     `;
   }
 
+  private renderAssemblyBanner() {
+    const assembly = this.snapshot.activeAssembly;
+    if (assembly === null || this.tab === "assembly") {
+      return nothing;
+    }
+    const done = assembly.picks.filter((pick) => pick.remaining === 0).length;
+    return html`<div class="card assembly-banner">
+      <span>
+        Идёт сборка «${this.format.assemblyTitle(assembly.name, assembly.kits)}»: ячеек готово
+        <strong>${done} / ${assembly.picks.length}</strong>. Горят только дисплеи нужных ячеек.
+      </span>
+      <span class="buttons">
+        <button class="primary" @click=${() => (location.hash = "assembly")}>Открыть</button>
+        <button class="danger" @click=${() => this.cancelAssembly(assembly)}>Прервать</button>
+      </span>
+    </div>`;
+  }
+
   private renderTab() {
     const snapshot = this.snapshot;
     switch (this.tab) {
+      case "assembly":
+        return html`<sku-assembly-tab
+          .service=${this.commands}
+          .specifications=${snapshot.specifications}
+          .assemblies=${snapshot.assemblies}
+          .activeAssembly=${snapshot.activeAssembly}
+          .boxes=${snapshot.boxes}
+          .boxNames=${snapshot.boxNames}
+          .componentNames=${snapshot.componentNames}
+        ></sku-assembly-tab>`;
       case "components":
         return html`
           <section>

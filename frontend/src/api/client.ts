@@ -1,6 +1,8 @@
 import type { OnboardingSettings } from "./box-setup-types";
 import { HttpClient } from "./http-client";
 import type {
+  Assembly,
+  Availability,
   Box,
   Calibration,
   CalibrationRequest,
@@ -10,6 +12,8 @@ import type {
   Locker,
   ScaleAction,
   ScaleResult,
+  Specification,
+  SpecificationRequest,
 } from "./types";
 
 export class ApiClient extends HttpClient {
@@ -78,5 +82,40 @@ export class ApiClient extends HttpClient {
 
   releaseComponent(nfcId: string): Promise<void> {
     return this.send(`/api/components/${encodeURIComponent(nfcId)}`, "DELETE");
+  }
+
+  specifications(): Promise<Specification[]> {
+    return this.get("/api/specifications");
+  }
+
+  createSpecification(request: SpecificationRequest): Promise<Specification> {
+    return this.send("/api/specifications", "POST", request);
+  }
+
+  updateSpecification(specificationId: number, request: SpecificationRequest): Promise<Specification> {
+    return this.send(`/api/specifications/${specificationId}`, "PUT", request);
+  }
+
+  deleteSpecification(specificationId: number): Promise<void> {
+    return this.send(`/api/specifications/${specificationId}`, "DELETE");
+  }
+
+  /** Whether the stands hold enough for this many products, and which cells an assembly would take from. */
+  availability(specificationId: number, kits: number): Promise<Availability> {
+    return this.get(`/api/specifications/${specificationId}/availability?kits=${kits}`);
+  }
+
+  /** Newest first, with the progress of each cell. */
+  assemblies(limit: number): Promise<Assembly[]> {
+    return this.get(`/api/assemblies?limit=${limit}`);
+  }
+
+  /** Fails with the missing components when the stock is short, or when another assembly runs. */
+  startAssembly(specificationId: number, kits: number): Promise<Assembly> {
+    return this.send("/api/assemblies", "POST", { specification_id: specificationId, kits });
+  }
+
+  cancelAssembly(assemblyId: number): Promise<Assembly> {
+    return this.send(`/api/assemblies/${assemblyId}`, "DELETE");
   }
 }

@@ -196,6 +196,10 @@ export class EventLog extends LitElement {
     if (item.quantity_before === null && item.quantity_after === null) {
       return html`<span class="muted">—</span>`;
     }
+    if (item.event_type === "assembly_started") {
+      // What the cell held when the assembly started; how many to take is in the note
+      return html`<span class="muted">было ${this.format.pieces(item.quantity_before)}</span>`;
+    }
     const range = html`<span class="muted">${item.quantity_before ?? "—"} → ${item.quantity_after ?? "—"}</span>`;
     if (item.quantity_delta === null || item.quantity_delta === 0) {
       return range;
@@ -213,7 +217,7 @@ export class EventLog extends LitElement {
         (!this.boxFilter || item.box_id === this.boxFilter) &&
         (!this.typeFilter || item.event_type === this.typeFilter) &&
         (!query ||
-          [item.component_name, item.nfc_id].some((value) => value?.toLowerCase().includes(query) ?? false)),
+          [item.component_name, item.nfc_id, item.note].some((value) => value?.toLowerCase().includes(query) ?? false)),
     );
   }
 }

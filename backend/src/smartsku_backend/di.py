@@ -14,6 +14,7 @@ from smartsku_backend.config import (
 from smartsku_backend.db.database import Database
 from smartsku_backend.messaging.publisher import CommandPublisher, MqttConnection
 from smartsku_backend.messaging.topics import MqttTopics
+from smartsku_backend.services.assembly import AssemblyService, AssemblyTracker, StockService
 from smartsku_backend.services.box_events import BoxEventService
 from smartsku_backend.services.box_status import BoxStatusService
 from smartsku_backend.services.calibration import CalibrationService
@@ -25,6 +26,7 @@ from smartsku_backend.services.layout import LayoutService
 from smartsku_backend.services.provisioning import ProvisioningService
 from smartsku_backend.services.runtime_cache import LockerRuntimeCache
 from smartsku_backend.services.scale import ScaleResultWaiter, ScaleService
+from smartsku_backend.services.specifications import SpecificationService
 from smartsku_backend.services.telemetry import TelemetryService
 
 
@@ -86,6 +88,10 @@ class ServicesProvider(Provider):
         InventoryQueryService,
         ComponentService,
         LayoutService,
+        SpecificationService,
+        StockService,
+        AssemblyTracker,
+        AssemblyService,
         scope=Scope.REQUEST,
     )
 

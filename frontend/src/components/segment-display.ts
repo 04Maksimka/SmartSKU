@@ -33,6 +33,7 @@ export class SegmentDisplay extends LitElement {
     E: 0x79,
     r: 0x50,
     F: 0x71,
+    P: 0x73,
   };
 
   static readonly DIGITS = 4;

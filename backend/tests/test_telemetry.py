@@ -16,6 +16,7 @@ from smartsku_backend.messaging.contracts import (
     IndicatorsCommand,
     LockerReading,
 )
+from smartsku_backend.services.assembly import AssemblyTracker
 from smartsku_backend.services.indicators import IndicatorPolicy
 from smartsku_backend.services.runtime_cache import LockerRuntimeCache
 from smartsku_backend.services.telemetry import TelemetryService
@@ -67,6 +68,7 @@ class TestTelemetryAccounting:
             LockerRuntimeCache(),
             IndicatorPolicy(),
             FakePublisher(),
+            AssemblyTracker(session),
             config=TelemetryConfig(
                 weight_change_threshold=0.1,
                 confirm_seconds=self.CONFIRM_SECONDS,

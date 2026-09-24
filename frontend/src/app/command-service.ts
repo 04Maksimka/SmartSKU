@@ -1,6 +1,15 @@
 import type { OnboardingSettings } from "../api/box-setup-types";
 import type { ApiClient } from "../api/client";
-import type { Box, Calibration, CalibrationRequest, ScaleAction, ScaleResult } from "../api/types";
+import type {
+  Assembly,
+  Availability,
+  Box,
+  Calibration,
+  CalibrationRequest,
+  ScaleAction,
+  ScaleResult,
+  SpecificationRequest,
+} from "../api/types";
 import type { DashboardStore } from "./dashboard-store";
 
 /** Write side of the dashboard: every action refreshes the snapshot so the screen never lags behind. */
@@ -67,6 +76,36 @@ export class CommandService {
 
   async releaseComponent(nfcId: string): Promise<void> {
     await this.api.releaseComponent(nfcId);
+    await this.store.refreshNow();
+  }
+
+  /** Saves a new specification, or changes the one with this id. */
+  async saveSpecification(specificationId: number | null, request: SpecificationRequest): Promise<void> {
+    if (specificationId === null) {
+      await this.api.createSpecification(request);
+    } else {
+      await this.api.updateSpecification(specificationId, request);
+    }
+    await this.store.refreshNow();
+  }
+
+  async deleteSpecification(specificationId: number): Promise<void> {
+    await this.api.deleteSpecification(specificationId);
+    await this.store.refreshNow();
+  }
+
+  availability(specificationId: number, kits: number): Promise<Availability> {
+    return this.api.availability(specificationId, kits);
+  }
+
+  async startAssembly(specificationId: number, kits: number): Promise<Assembly> {
+    const assembly = await this.api.startAssembly(specificationId, kits);
+    await this.store.refreshNow();
+    return assembly;
+  }
+
+  async cancelAssembly(assemblyId: number): Promise<void> {
+    await this.api.cancelAssembly(assemblyId);
     await this.store.refreshNow();
   }
 }

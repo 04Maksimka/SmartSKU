@@ -10,6 +10,19 @@ class LedColor(StrEnum):
     NONE = "none"
 
 
+class ScreenMode(StrEnum):
+    """What the slot display shows from an indicators command (see firmware CountDisplay.h)."""
+
+    # The piece count; screen_number null: dashes (no cell, or it is not counted)
+    COUNT = "count"
+    # Blank: the slot has nothing to do with the running assembly
+    OFF = "off"
+    # "t" and screen_number: take this many pieces for the assembly
+    TAKE = "take"
+    # "P" and screen_number: too many were taken, put this many back
+    PUT = "put"
+
+
 class CalibrationStep(StrEnum):
     """Steps the box walks through by itself during a calibration, watching NFC and the load cell."""
 
@@ -139,6 +152,8 @@ class IndicatorsCommand(BaseModel):
     led_color: LedColor
     # None: the display shows dashes (no cell, or the cell has no tare or is not calibrated)
     screen_number: int | None
+    # Firmware before 0.9.0 ignores it and shows screen_number (dashes for OFF)
+    screen_mode: ScreenMode = ScreenMode.COUNT
 
 
 class ProvisionRequest(BaseModel):

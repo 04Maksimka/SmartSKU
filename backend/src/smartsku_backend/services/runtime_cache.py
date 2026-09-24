@@ -84,6 +84,16 @@ class LockerRuntimeCache:
         pending = self._pending.get((box_id, locker_id))
         return pending is not None and pending.confirmed(now)
 
+    def forget_all(self) -> None:
+        """Every box reprocesses its next telemetry and resends its indicators."""
+        for storage in (self._readings, self._indicators):
+            storage.clear()
+
+    def forget_slot(self, box_id: str, locker_id: int) -> None:
+        """The slot's next reading is reprocessed and its indicators resent."""
+        for storage in (self._readings, self._indicators):
+            storage.pop((box_id, locker_id), None)
+
     def forget_box(self, box_id: str) -> None:
         for storage in (self._readings, self._indicators, self._pending):
             for key in [key for key in storage if key[0] == box_id]:

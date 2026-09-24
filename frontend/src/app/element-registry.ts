@@ -1,3 +1,6 @@
+import { AssemblyDialog } from "../components/assembly-dialog";
+import { AssemblyProgress } from "../components/assembly-progress";
+import { AssemblyTab } from "../components/assembly-tab";
 import { BoxCard } from "../components/box-card";
 import { BoxMini } from "../components/box-mini";
 import { BoxSetupDialog } from "../components/box-setup-dialog";
@@ -10,6 +13,7 @@ import { ProcedureChecklist } from "../components/procedure-checklist";
 import { SkuApp } from "../components/sku-app";
 import { ScaleSetupDialog } from "../components/scale-setup-dialog";
 import { SegmentDisplay } from "../components/segment-display";
+import { SpecificationDialog } from "../components/specification-dialog";
 import { StandView } from "../components/stand-view";
 
 export class ElementRegistry {
@@ -27,6 +31,10 @@ export class ElementRegistry {
     ["sku-scale-setup-dialog", ScaleSetupDialog],
     ["sku-procedure-checklist", ProcedureChecklist],
     ["sku-segment-display", SegmentDisplay],
+    ["sku-assembly-tab", AssemblyTab],
+    ["sku-assembly-progress", AssemblyProgress],
+    ["sku-assembly-dialog", AssemblyDialog],
+    ["sku-specification-dialog", SpecificationDialog],
   ];
 
   register(): void {

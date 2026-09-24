@@ -272,9 +272,11 @@ void BoxApp::handleCommand(const String &payload) {
     locker->cancelCalibration();
   } else if (command == "indicators") {
     String color = doc["led_color"] | "none";
-    // screen_number: null — прочерки (ячейки нет, у неё нет тары или она не откалибрована)
+    // screen_number: null — прочерки (ячейки нет, у неё нет тары или она не откалибрована).
+    // screen_mode (сборка): take — "t N", put — "P N", off — погашен; нет поля — count
     JsonVariant screenNumber = doc["screen_number"];
-    if (!locker->applyIndicators(color, !screenNumber.isNull(), screenNumber | 0)) {
+    Locker::ScreenMode mode = Locker::parseScreenMode(doc["screen_mode"] | "count");
+    if (!locker->applyIndicators(color, mode, !screenNumber.isNull(), screenNumber | 0)) {
       Serial.printf("[app] unknown led_color %s\n", color.c_str());
     }
   } else {

@@ -1,5 +1,15 @@
 import type { ApiClient } from "../api/client";
-import type { Box, Calibration, Cluster, Component, InventoryEvent, Locker } from "../api/types";
+import type {
+  Assembly,
+  AssemblyPick,
+  Box,
+  Calibration,
+  Cluster,
+  Component,
+  InventoryEvent,
+  Locker,
+  Specification,
+} from "../api/types";
 import type { AppConfig } from "../config/app-config";
 
 export interface LockerOverview {
@@ -8,6 +18,15 @@ export interface LockerOverview {
   pendingCalibration: Calibration | null;
   /** Latest pull-out from this locker: tells which cell is missing while the locker is empty. */
   lastRemoval: InventoryEvent | null;
+  /** Set while an assembly runs: the slot's task, or no task — its display is dark. */
+  assembly: SlotAssembly | null;
+}
+
+/** What the running assembly asks of a slot, as its display shows it (backend IndicatorPolicy). */
+export interface SlotAssembly {
+  assembly: Assembly;
+  /** The cell of this slot to take from; null — nothing to do here. */
+  pick: AssemblyPick | null;
 }
 
 export interface BoxOverview {
@@ -39,6 +58,13 @@ export interface DashboardSnapshot {
   components: ComponentOverview[];
   calibrations: Calibration[];
   events: InventoryEvent[];
+  specifications: Specification[];
+  /** Newest first. */
+  assemblies: Assembly[];
+  /** The assembly that runs now: it takes over the displays of all boxes. */
+  activeAssembly: Assembly | null;
+  /** Names of calibrated components, each once: what a specification can ask for. */
+  componentNames: string[];
   boxNames: Map<string, string>;
   updatedAt: Date | null;
   error: string | null;
@@ -56,6 +82,10 @@ export class DashboardStore {
     components: [],
     calibrations: [],
     events: [],
+    specifications: [],
+    assemblies: [],
+    activeAssembly: null,
+    componentNames: [],
     boxNames: new Map(),
     updatedAt: null,
     error: null,
@@ -113,15 +143,21 @@ export class DashboardStore {
 
   private async refresh(): Promise<void> {
     try {
-      const [boxes, clusters, lockers, components, calibrations, events] = await Promise.all([
-        this.api.boxes(),
-        this.api.clusters(),
-        this.api.lockers(),
-        this.api.components(),
-        this.api.calibrations(),
-        this.api.events(this.config.eventsLimit),
-      ]);
-      this.snapshot = this.build(boxes, clusters, lockers, components, calibrations, events);
+      const [boxes, clusters, lockers, components, calibrations, events, specifications, assemblies] =
+        await Promise.all([
+          this.api.boxes(),
+          this.api.clusters(),
+          this.api.lockers(),
+          this.api.components(),
+          this.api.calibrations(),
+          this.api.events(this.config.eventsLimit),
+          this.api.specifications(),
+          this.api.assemblies(this.config.assembliesLimit),
+        ]);
+      this.snapshot = {
+        ...this.build(boxes, clusters, lockers, components, calibrations, events, assemblies),
+        specifications,
+      };
     } catch (error) {
       this.snapshot = { ...this.snapshot, error: error instanceof Error ? error.message : String(error) };
     }
@@ -137,7 +173,9 @@ export class DashboardStore {
     components: Component[],
     calibrations: Calibration[],
     events: InventoryEvent[],
+    assemblies: Assembly[],
   ): DashboardSnapshot {
+    const activeAssembly = assemblies.find((item) => item.status === "active") ?? null;
     const boxNames = new Map(boxes.map((box) => [box.id, this.boxName(box, clusters)]));
     const newestFirst = [...calibrations].sort((left, right) => right.id - left.id);
     const overviews = lockers.map<LockerOverview>((locker) => ({
@@ -155,6 +193,7 @@ export class DashboardStore {
               event.box_id === locker.box_id &&
               event.locker_id === locker.locker_id,
           ) ?? null),
+      assembly: activeAssembly ? { assembly: activeAssembly, pick: this.pickOf(activeAssembly, locker) } : null,
     }));
 
     const boxOverviews = boxes.map<BoxOverview>((box) => ({
@@ -182,10 +221,23 @@ export class DashboardStore {
       })),
       calibrations: newestFirst.slice(0, this.config.calibrationsLimit),
       events,
+      specifications: this.snapshot.specifications,
+      assemblies,
+      activeAssembly,
+      componentNames: [...new Set(components.map((component) => component.name))].sort((left, right) =>
+        left.localeCompare(right, "ru"),
+      ),
       boxNames,
       updatedAt: new Date(),
       error: null,
     };
+  }
+
+  /** The task of the slot: its cell, or the cell the person has in hands while the slot is empty. */
+  private pickOf(assembly: Assembly, locker: Locker): AssemblyPick | null {
+    const pick =
+      assembly.picks.find((item) => item.box_id === locker.box_id && item.locker_id === locker.locker_id) ?? null;
+    return pick !== null && locker.nfc_flag && locker.nfc_id !== pick.nfc_id ? null : pick;
   }
 
   /** The stand name is added only when there are several stands: with one, the address alone is unambiguous. */

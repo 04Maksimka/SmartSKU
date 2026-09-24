@@ -1,4 +1,4 @@
-import type { CalibrationStatus, InventoryEventType } from "../api/types";
+import type { AssemblyStatus, CalibrationStatus, InventoryEventType } from "../api/types";
 
 export type Tone = "neutral" | "good" | "bad" | "warn" | "info";
 
@@ -20,6 +20,15 @@ export class Formatter {
     slot_scaled: ["Слот настроен гирей", "info"],
     cell_tared: ["Ячейка взвешена пустой", "info"],
     scale_failed: ["Настройка весов не удалась", "bad"],
+    assembly_started: ["Сборка: начало", "info"],
+    assembly_completed: ["Сборка: собрано", "good"],
+    assembly_cancelled: ["Сборка: прервана", "warn"],
+  };
+
+  private readonly assemblyLabels: Record<AssemblyStatus, [string, Tone]> = {
+    active: ["Идёт", "info"],
+    completed: ["Собрана", "good"],
+    cancelled: ["Прервана", "neutral"],
   };
 
   private readonly calibrationLabels: Record<CalibrationStatus, [string, Tone]> = {
@@ -80,5 +89,14 @@ export class Formatter {
 
   calibrationLabel(status: CalibrationStatus): [string, Tone] {
     return this.calibrationLabels[status];
+  }
+
+  assemblyLabel(status: AssemblyStatus): [string, Tone] {
+    return this.assemblyLabels[status];
+  }
+
+  /** "Стол", or "Стол ×3" when several products are assembled at once. */
+  assemblyTitle(name: string, kits: number): string {
+    return kits > 1 ? `${name} ×${kits}` : name;
   }
 }

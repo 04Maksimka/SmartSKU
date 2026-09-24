@@ -4,6 +4,7 @@ import { DashboardEvents } from "../app/dashboard-events";
 import type { LockerOverview } from "../app/dashboard-store";
 import { Formatter } from "../app/formatter";
 import type { CalibrationStep } from "../api/types";
+import { AssemblyScreen } from "../app/assembly-screen";
 import { CalibrationPlan } from "../app/calibration-plan";
 import { SegmentDisplay } from "./segment-display";
 import { Theme } from "./theme";
@@ -42,6 +43,45 @@ export class LockerTile extends LitElement {
         border-style: dashed;
         background: var(--surface-2);
         box-shadow: none;
+      }
+
+      /* Assembly: the slots to take from stand out, the rest fade like their dark displays */
+      .tile.task-take,
+      .tile.task-put {
+        border: 2px solid var(--accent);
+        box-shadow: 0 0 0 3px var(--accent-soft);
+      }
+
+      .tile.task-put {
+        border-color: var(--tone-bad);
+        box-shadow: 0 0 0 3px var(--tone-bad-bg);
+      }
+
+      .tile.task-done {
+        border-color: var(--tone-good);
+      }
+
+      .tile.task-none {
+        opacity: 0.5;
+      }
+
+      .task {
+        margin: 8px 8px 0;
+        padding: 8px 10px;
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: 600;
+        background: var(--accent-soft);
+      }
+
+      .task.put {
+        background: var(--tone-bad-bg);
+        color: var(--tone-bad);
+      }
+
+      .task.done {
+        background: var(--tone-good-bg);
+        color: var(--tone-good);
       }
 
       .head {
@@ -306,17 +346,18 @@ export class LockerTile extends LitElement {
 
   private readonly format = new Formatter();
   private readonly events = new DashboardEvents();
+  private readonly screen = new AssemblyScreen();
   private signature = "";
 
   protected override render() {
     const { locker } = this.overview;
     return html`
-      <div class="tile ${locker.nfc_flag ? "" : "out"}">
+      <div class="tile ${locker.nfc_flag ? "" : "out"} ${this.taskClass()}">
         <div class="head">
           <span class="slot">Слот ${this.format.slot(locker.locker_id)}</span>
           ${this.renderPresence()}
         </div>
-        ${this.renderDisplay()}
+        ${this.renderDisplay()} ${this.renderTask()}
         <div class="details">
           ${locker.nfc_flag ? this.renderInserted() : this.renderPulledOut()}
           ${locker.calibration ? this.renderCalibration() : this.renderSetupNote()}
@@ -411,10 +452,35 @@ export class LockerTile extends LitElement {
     </button>`;
   }
 
+  private taskClass(): string {
+    const assembly = this.overview.assembly;
+    if (assembly === null) {
+      return "";
+    }
+    return assembly.pick === null ? "task-none" : `task-${this.screen.state(assembly.pick)}`;
+  }
+
+  /** The assembly's task for this slot in words, under the display that shows it as "t 20". */
+  private renderTask() {
+    const pick = this.overview.assembly?.pick ?? null;
+    if (pick === null) {
+      return nothing;
+    }
+    const state = this.screen.state(pick);
+    return html`<div class="task ${state}">
+      ${state === "done" ? "✓ Взято для сборки" : `Сборка: ${this.screen.hint(pick)}`}
+    </div>`;
+  }
+
   /** Replica of the slot's seven-segment display, by the same rules as the firmware (Locker::refreshDisplay). */
   private renderDisplay() {
     const { locker } = this.overview;
-    const counted = locker.nfc_flag && locker.component !== null && locker.quantity !== null && !locker.calibration;
+    const counted =
+      locker.nfc_flag &&
+      locker.component !== null &&
+      locker.quantity !== null &&
+      !locker.calibration &&
+      this.overview.assembly === null;
     return html`<div class="display-panel">
       <sku-segment-display .text=${this.displayText()}></sku-segment-display>
       ${counted ? html`<span class="unit">шт</span>` : nothing}
@@ -426,6 +492,9 @@ export class LockerTile extends LitElement {
     const { locker } = this.overview;
     if (locker.calibration) {
       return LockerTile.STEP_PROMPTS[locker.calibration.step];
+    }
+    if (this.overview.assembly !== null) {
+      return this.screen.text(this.overview.assembly.pick);
     }
     if (!locker.nfc_flag || locker.component === null || locker.quantity === null) {
       return "----";
@@ -449,6 +518,7 @@ export class LockerTile extends LitElement {
       locker.component?.name,
       pendingCalibration?.id,
       locker.calibration?.step,
+      this.overview.assembly?.pick?.remaining,
     ]
       .map(String)
       .join("|");

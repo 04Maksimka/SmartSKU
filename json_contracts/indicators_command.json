@@ -2,6 +2,7 @@
     "command": "indicators",
     "box_id": "kdsojfaojg",
     "locker_id": 0,
-    "led_color": "red",
-    "screen_number": 25
+    "led_color": "green",
+    "screen_number": 25,
+    "screen_mode": "take"
 }
