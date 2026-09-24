@@ -5,10 +5,14 @@ from fastapi import APIRouter, Query, status
 
 from smartsku_backend.api.schemas import (
     BoxClaimRequest,
+    BoxPlacementRequest,
+    BoxRenameRequest,
     BoxSchema,
     CalibrationProgressSchema,
     CalibrationRequest,
     CalibrationSchema,
+    ClusterRenameRequest,
+    ClusterSchema,
     ComponentSchema,
     InventoryEventSchema,
     LockerSchema,
@@ -20,6 +24,7 @@ from smartsku_backend.config import OnboardingConfig
 from smartsku_backend.db.models import CalibrationStatus
 from smartsku_backend.services.calibration import CalibrationService
 from smartsku_backend.services.inventory import ComponentService, InventoryQueryService
+from smartsku_backend.services.layout import LayoutService
 from smartsku_backend.services.provisioning import ProvisioningService
 from smartsku_backend.services.scale import ScaleService
 
@@ -74,6 +79,45 @@ class BoxesController:
             )
             for state, component in await inventory.lockers(box_id, free)
         ]
+
+
+class LayoutController:
+    """Stands and where each box stands on them, so people find a box by its address instead of its id."""
+
+    def __init__(self) -> None:
+        self.router = APIRouter(prefix="/api", tags=["layout"], route_class=DishkaRoute)
+        self.router.add_api_route("/clusters", self.list_clusters, methods=["GET"], response_model=list[ClusterSchema])
+        self.router.add_api_route(
+            "/clusters/{cluster_id}", self.rename_cluster, methods=["PATCH"], response_model=ClusterSchema
+        )
+        self.router.add_api_route("/boxes/{box_id}", self.rename_box, methods=["PATCH"], response_model=BoxSchema)
+        self.router.add_api_route(
+            "/boxes/{box_id}/placement", self.place_box, methods=["PUT"], response_model=BoxSchema
+        )
+        self.router.add_api_route(
+            "/boxes/{box_id}/placement", self.unplace_box, methods=["DELETE"], response_model=BoxSchema
+        )
+
+    async def list_clusters(self, layout: FromDishka[LayoutService]) -> list[ClusterSchema]:
+        return [ClusterSchema.model_validate(cluster) for cluster in await layout.clusters()]
+
+    async def rename_cluster(
+        self, cluster_id: int, request: ClusterRenameRequest, layout: FromDishka[LayoutService]
+    ) -> ClusterSchema:
+        return ClusterSchema.model_validate(await layout.rename_cluster(cluster_id, request.name.strip()))
+
+    async def rename_box(self, box_id: str, request: BoxRenameRequest, layout: FromDishka[LayoutService]) -> BoxSchema:
+        alias = request.alias.strip() if request.alias else None
+        return BoxSchema.model_validate(await layout.rename_box(box_id, alias))
+
+    async def place_box(
+        self, box_id: str, request: BoxPlacementRequest, layout: FromDishka[LayoutService]
+    ) -> BoxSchema:
+        """Puts the box into a grid cell next to another box of the stand; the stand is renumbered from A1."""
+        return BoxSchema.model_validate(await layout.place(box_id, request.cluster_id, request.x, request.y))
+
+    async def unplace_box(self, box_id: str, layout: FromDishka[LayoutService]) -> BoxSchema:
+        return BoxSchema.model_validate(await layout.unplace(box_id))
 
 
 class CalibrationController:

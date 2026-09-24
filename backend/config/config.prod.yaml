@@ -36,5 +36,9 @@ onboarding:
   # New boxes are registered only after "Подключить бокс" on the dashboard, within this time
   claim_ttl_minutes: 30
 
+layout:
+  # Boxes joined into stands: a new stand is named "<prefix> N", the user can rename it
+  cluster_name_prefix: Стенд
+
 logging:
   level: INFO

@@ -10,6 +10,7 @@ import type {
 import { BleBoxLink } from "../app/ble-box-link";
 import { BoxArrivalWatch } from "../app/box-arrival-watch";
 import type { CommandService } from "../app/command-service";
+import { DashboardEvents } from "../app/dashboard-events";
 import { Formatter } from "../app/formatter";
 import { Theme } from "./theme";
 
@@ -295,6 +296,7 @@ export class BoxSetupDialog extends LitElement {
   private readonly arrival = new BoxArrivalWatch(() => this.service.boxes());
   private handoverTimer: number | null = null;
   private readonly format = new Formatter();
+  private readonly events = new DashboardEvents();
   private readonly subscriptions: (() => void)[] = [];
 
   constructor() {
@@ -585,7 +587,8 @@ export class BoxSetupDialog extends LitElement {
       ${this.linkLost && !done && !expectedLinkLoss ? this.renderLinkLost() : nothing}
       <div class="actions">
         ${done
-          ? html`<button class="primary" @click=${this.close}>Готово</button>`
+          ? html`<button @click=${this.close}>Готово</button>
+              <button class="primary" @click=${this.placeRegistered}>Указать место на стенде</button>`
           : html`
               <button @click=${this.close}>Закрыть</button>
               <button ?disabled=${this.linkLost} @click=${() => (this.step = "configure")}>Изменить настройки</button>
@@ -629,8 +632,9 @@ export class BoxSetupDialog extends LitElement {
             </div>`;
       case "registered":
         return html`<div class="note good">
-          Бокс зарегистрирован (box_id <span class="mono">${status.box_id}</span>) и появился на складе. Для новых
-          ячеек установите ноль на их карточках.
+          Бокс зарегистрирован (box_id <span class="mono">${status.box_id}</span>) и появился на складе. Укажите, где
+          он стоит на стенде: так его будет легко найти по адресу (например, B1). Для новых ячеек установите ноль на
+          их карточках.
         </div>`;
       default:
         return html`<div class="note">Бокс подключается…</div>`;
@@ -876,6 +880,15 @@ export class BoxSetupDialog extends LitElement {
   private inputValue(event: Event): string {
     return (event.target as HTMLInputElement | HTMLSelectElement).value;
   }
+
+  /** Closes the wizard and lets the user pick the box's cell on the stand right on the dashboard. */
+  private readonly placeRegistered = (): void => {
+    const boxId = this.status?.box_id;
+    this.close();
+    if (boxId) {
+      this.events.placeBox(this, boxId);
+    }
+  };
 
   private readonly close = (): void => {
     this.dialog()?.close();

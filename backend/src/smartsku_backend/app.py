@@ -12,6 +12,7 @@ from smartsku_backend.api.controllers import (
     BoxesController,
     CalibrationController,
     ComponentsController,
+    LayoutController,
     OnboardingController,
 )
 from smartsku_backend.config import AppConfig, MqttConfig
@@ -30,7 +31,14 @@ class ApplicationFactory:
 
     def create(self) -> FastAPI:
         app = FastAPI(title="SmartSKU backend", lifespan=self._lifespan)
-        for controller in (BoxesController(), CalibrationController(), ComponentsController(), OnboardingController()):
+        controllers = (
+            BoxesController(),
+            LayoutController(),
+            CalibrationController(),
+            ComponentsController(),
+            OnboardingController(),
+        )
+        for controller in controllers:
             app.include_router(controller.router)
         app.add_api_route("/health", self._health, methods=["GET"])
         app.add_exception_handler(DomainError, self._domain_error_handler)

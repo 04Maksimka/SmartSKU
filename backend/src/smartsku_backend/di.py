@@ -3,7 +3,14 @@ from collections.abc import AsyncIterable
 from dishka import AsyncContainer, Provider, Scope, from_context, make_async_container, provide, provide_all
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from smartsku_backend.config import AppConfig, MqttConfig, OnboardingConfig, ScaleConfig, TelemetryConfig
+from smartsku_backend.config import (
+    AppConfig,
+    LayoutConfig,
+    MqttConfig,
+    OnboardingConfig,
+    ScaleConfig,
+    TelemetryConfig,
+)
 from smartsku_backend.db.database import Database
 from smartsku_backend.messaging.publisher import CommandPublisher, MqttConnection
 from smartsku_backend.messaging.topics import MqttTopics
@@ -14,6 +21,7 @@ from smartsku_backend.services.clock import MonotonicClock
 from smartsku_backend.services.failure_notes import FailureNotes
 from smartsku_backend.services.indicators import IndicatorPolicy
 from smartsku_backend.services.inventory import ComponentService, InventoryQueryService
+from smartsku_backend.services.layout import LayoutService
 from smartsku_backend.services.provisioning import ProvisioningService
 from smartsku_backend.services.runtime_cache import LockerRuntimeCache
 from smartsku_backend.services.scale import ScaleResultWaiter, ScaleService
@@ -38,6 +46,10 @@ class ConfigProvider(Provider):
     @provide(scope=Scope.APP)
     def scale(self, config: AppConfig) -> ScaleConfig:
         return config.scale
+
+    @provide(scope=Scope.APP)
+    def layout(self, config: AppConfig) -> LayoutConfig:
+        return config.layout
 
 
 class InfrastructureProvider(Provider):
@@ -73,6 +85,7 @@ class ServicesProvider(Provider):
         ScaleService,
         InventoryQueryService,
         ComponentService,
+        LayoutService,
         scope=Scope.REQUEST,
     )
 

@@ -1,10 +1,15 @@
 import { LitElement, css, html, nothing } from "lit";
 import { repeat } from "lit/directives/repeat.js";
 
-import type { Calibration } from "../api/types";
+import type { Calibration, Cluster } from "../api/types";
 import type { CommandService } from "../app/command-service";
-import { DashboardEvents, type CancelCalibrationRequest, type ReleaseComponentRequest } from "../app/dashboard-events";
-import type { DashboardSnapshot, DashboardStore, LockerOverview } from "../app/dashboard-store";
+import {
+  DashboardEvents,
+  type CancelCalibrationRequest,
+  type PlaceAtRequest,
+  type ReleaseComponentRequest,
+} from "../app/dashboard-events";
+import type { BoxOverview, DashboardSnapshot, DashboardStore, LockerOverview } from "../app/dashboard-store";
 import { Formatter } from "../app/formatter";
 import { ThemePreference, type ThemeChoice } from "../app/theme-preference";
 import type { BoxSetupDialog } from "./box-setup-dialog";
@@ -30,6 +35,8 @@ export class SkuApp extends LitElement {
     actionError: { state: true },
     tab: { state: true },
     theme: { state: true },
+    editingLayout: { state: true },
+    placingBoxId: { state: true },
   };
 
   static override styles = [
@@ -279,6 +286,42 @@ export class SkuApp extends LitElement {
         gap: 16px;
       }
 
+      .layout-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 8px 16px;
+        margin-bottom: 16px;
+        font-size: 13px;
+      }
+
+      .placing {
+        position: sticky;
+        top: 70px;
+        z-index: 40;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 10px 16px;
+        margin-bottom: 20px;
+        padding: 12px 14px;
+        border-color: var(--accent);
+      }
+
+      .placing .buttons {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      @media (max-width: 720px) {
+        .placing {
+          top: 120px;
+        }
+      }
+
       .empty-state {
         display: flex;
         flex-direction: column;
@@ -303,6 +346,10 @@ export class SkuApp extends LitElement {
   declare actionError: string | null;
   declare tab: Tab;
   declare theme: ThemeChoice;
+  /** The stands are being rearranged: box cards offer to move, rename or take a box off its stand. */
+  declare editingLayout: boolean;
+  /** Box the user is choosing a place on a stand for. */
+  declare placingBoxId: string | null;
 
   private readonly format = new Formatter();
   private readonly themePreference = new ThemePreference();
@@ -316,6 +363,8 @@ export class SkuApp extends LitElement {
   constructor() {
     super();
     this.actionError = null;
+    this.editingLayout = false;
+    this.placingBoxId = null;
     this.tab = this.tabFromHash();
     this.theme = this.themePreference.current();
     this.themePreference.apply(this.theme);
@@ -356,6 +405,11 @@ export class SkuApp extends LitElement {
     this.addEventListener(DashboardEvents.SCALE_SETUP, this.handleScaleSetup);
     this.addEventListener(DashboardEvents.CANCEL_CALIBRATION, this.handleCancelCalibration);
     this.addEventListener(DashboardEvents.RELEASE_COMPONENT, this.handleReleaseComponent);
+    this.addEventListener(DashboardEvents.PLACE_BOX, this.handlePlaceBox);
+    this.addEventListener(DashboardEvents.PLACE_AT, this.handlePlaceAt);
+    this.addEventListener(DashboardEvents.UNPLACE_BOX, this.handleUnplaceBox);
+    this.addEventListener(DashboardEvents.RENAME_BOX, this.handleRenameBox);
+    this.addEventListener(DashboardEvents.RENAME_CLUSTER, this.handleRenameCluster);
     window.addEventListener("hashchange", this.handleHashChange);
   }
 
@@ -368,6 +422,11 @@ export class SkuApp extends LitElement {
     this.removeEventListener(DashboardEvents.SCALE_SETUP, this.handleScaleSetup);
     this.removeEventListener(DashboardEvents.CANCEL_CALIBRATION, this.handleCancelCalibration);
     this.removeEventListener(DashboardEvents.RELEASE_COMPONENT, this.handleReleaseComponent);
+    this.removeEventListener(DashboardEvents.PLACE_BOX, this.handlePlaceBox);
+    this.removeEventListener(DashboardEvents.PLACE_AT, this.handlePlaceAt);
+    this.removeEventListener(DashboardEvents.UNPLACE_BOX, this.handleUnplaceBox);
+    this.removeEventListener(DashboardEvents.RENAME_BOX, this.handleRenameBox);
+    this.removeEventListener(DashboardEvents.RENAME_CLUSTER, this.handleRenameCluster);
   }
 
   private readonly handleCalibrate = (event: Event): void => {
@@ -401,6 +460,57 @@ export class SkuApp extends LitElement {
     const request = (event as CustomEvent<ReleaseComponentRequest>).detail;
     if (confirm(`Освободить ячейку: ${request.label}? Бэкенд забудет, что в ней лежит.`)) {
       void this.run(() => this.commands.releaseComponent(request.nfcId));
+    }
+  };
+
+  /** The first box starts a stand right away; otherwise the stands show where the box can go. */
+  private readonly handlePlaceBox = (event: Event): void => {
+    const boxId = (event as CustomEvent<string>).detail;
+    this.actionError = null;
+    if (location.hash !== "#boxes") {
+      location.hash = "boxes";
+    }
+    if (this.snapshot.clusters.length === 0) {
+      void this.run(() => this.commands.placeBox(boxId, null));
+    } else {
+      this.placingBoxId = boxId;
+    }
+  };
+
+  private readonly handlePlaceAt = (event: Event): void => {
+    const request = (event as CustomEvent<PlaceAtRequest>).detail;
+    const boxId = this.placingBoxId;
+    if (boxId !== null) {
+      void this.run(async () => {
+        await this.commands.placeBox(boxId, request.clusterId, request.x, request.y);
+        this.placingBoxId = null;
+      });
+    }
+  };
+
+  private readonly handleUnplaceBox = (event: Event): void => {
+    const item = (event as CustomEvent<BoxOverview>).detail;
+    const question =
+      `Убрать бокс ${item.name} со стенда? Учёт по нему продолжится, а на дашборде он будет в «Не размещены».` +
+      " Адреса остальных боксов стенда могут сдвинуться.";
+    if (confirm(question)) {
+      void this.run(() => this.commands.unplaceBox(item.box.id));
+    }
+  };
+
+  private readonly handleRenameBox = (event: Event): void => {
+    const item = (event as CustomEvent<BoxOverview>).detail;
+    const alias = prompt(`Название бокса ${item.name}, например, что в нём лежит. Пусто — без названия.`, item.box.alias ?? "");
+    if (alias !== null) {
+      void this.run(() => this.commands.renameBox(item.box.id, alias.trim() || null));
+    }
+  };
+
+  private readonly handleRenameCluster = (event: Event): void => {
+    const cluster = (event as CustomEvent<Cluster>).detail;
+    const name = prompt("Название стенда", cluster.name)?.trim();
+    if (name) {
+      void this.run(() => this.commands.renameCluster(cluster.id, name));
     }
   };
 
@@ -539,24 +649,86 @@ export class SkuApp extends LitElement {
         return html`
           <div class="actions-inline">${this.renderActions()}</div>
           ${snapshot.boxes.length ? this.renderSummary() : nothing}
-          <section>
-            <div class="section-title"><h2>Боксы<span class="count">${snapshot.boxes.length}</span></h2></div>
-            ${snapshot.boxes.length
-              ? html`<div class="boxes">
-                  ${repeat(
-                    snapshot.boxes,
-                    (item) => item.box.id,
-                    (item) => html`<sku-box-card .overview=${item}></sku-box-card>`,
-                  )}
-                </div>`
-              : html`<div class="card empty empty-state">
+          ${snapshot.boxes.length
+            ? this.renderStands()
+            : html`<section>
+                <div class="card empty empty-state">
                   <div>Устройств нет. Зажмите кнопку подключения на боксе на 3 секунды и подключите его по Bluetooth.</div>
                   <button class="primary" @click=${this.openSetup}>Подключить бокс</button>
-                </div>`}
-          </section>
+                </div>
+              </section>`}
         `;
     }
   }
+
+  /** Stands laid out as they stand, then the boxes that have no place yet. */
+  private renderStands() {
+    const snapshot = this.snapshot;
+    const placing = snapshot.boxes.find((item) => item.box.id === this.placingBoxId) ?? null;
+    return html`
+      ${placing ? this.renderPlacing(placing) : nothing}
+      ${snapshot.clusters.length
+        ? html`<div class="layout-bar">
+            <span class="muted">
+              Адрес бокса — столбец (A, B… слева направо) и ряд (1, 2… снизу вверх), как стоят боксы на стенде.
+            </span>
+            <button
+              class=${this.editingLayout ? "primary" : ""}
+              @click=${() => (this.editingLayout = !this.editingLayout)}
+            >
+              ${this.editingLayout ? "Готово" : "Изменить расстановку"}
+            </button>
+          </div>`
+        : nothing}
+      ${repeat(
+        snapshot.clusters,
+        (item) => item.cluster.id,
+        (item) => html`<section>
+          <sku-stand-view .overview=${item} ?editing=${this.editingLayout} .placing=${placing}></sku-stand-view>
+        </section>`,
+      )}
+      ${snapshot.unplaced.length
+        ? html`<section>
+            <div class="section-title">
+              <h2>Не размещены<span class="count">${snapshot.unplaced.length}</span></h2>
+            </div>
+            <div class="boxes">
+              ${repeat(
+                snapshot.unplaced,
+                (item) => item.box.id,
+                (item) => html`<sku-box-card .overview=${item} ?moving=${item.box.id === this.placingBoxId}></sku-box-card>`,
+              )}
+            </div>
+          </section>`
+        : nothing}
+    `;
+  }
+
+  private renderPlacing(placing: BoxOverview) {
+    const alone =
+      placing.box.cluster_id !== null &&
+      !this.snapshot.boxes.some((item) => item.box.cluster_id === placing.box.cluster_id && item !== placing);
+    return html`<div class="card placing">
+      <div>
+        <b>Где стоит бокс ${placing.name}?</b>
+        <span class="muted">Нажмите «+ Поставить сюда» рядом с боксом, к которому он пристыкован.</span>
+      </div>
+      <div class="buttons">
+        ${alone
+          ? nothing
+          : html`<button @click=${() => this.handlePlaceAtNewStand(placing)}>На новый стенд</button>`}
+        <button @click=${() => (this.placingBoxId = null)}>Отмена</button>
+      </div>
+    </div>`;
+  }
+
+  private handlePlaceAtNewStand(placing: BoxOverview): void {
+    void this.run(async () => {
+      await this.commands.placeBox(placing.box.id, null);
+      this.placingBoxId = null;
+    });
+  }
+
 
   /** The state of the whole warehouse at a glance. */
   private renderSummary() {

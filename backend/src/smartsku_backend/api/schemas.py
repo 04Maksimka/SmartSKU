@@ -16,6 +16,30 @@ class BoxSchema(OrmSchema):
     online: bool
     created_at: datetime
     status_changed_at: datetime | None
+    alias: str | None
+    cluster_id: int | None = Field(description="Stand the box is placed on, null while not placed")
+    grid_x: int | None = Field(description="Column on the stand from the left, from 0")
+    grid_y: int | None = Field(description="Row on the stand from the bottom, from 0")
+    address: str | None = Field(description="Column letter and row number on the stand, e.g. B1")
+
+
+class ClusterSchema(OrmSchema):
+    id: int
+    name: str
+
+
+class ClusterRenameRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=64)
+
+
+class BoxRenameRequest(BaseModel):
+    alias: str | None = Field(default=None, max_length=64, description="Empty or null removes the name")
+
+
+class BoxPlacementRequest(BaseModel):
+    cluster_id: int | None = Field(description="Null: start a new stand with this box")
+    x: int = Field(default=0, description="Column from the left; -1 puts the box left of column A")
+    y: int = Field(default=0, description="Row from the bottom; -1 puts the box below row 1")
 
 
 class BoxClaimRequest(BaseModel):

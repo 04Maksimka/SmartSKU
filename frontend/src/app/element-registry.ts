@@ -9,11 +9,13 @@ import { ProcedureChecklist } from "../components/procedure-checklist";
 import { SkuApp } from "../components/sku-app";
 import { ScaleSetupDialog } from "../components/scale-setup-dialog";
 import { SegmentDisplay } from "../components/segment-display";
+import { StandView } from "../components/stand-view";
 
 export class ElementRegistry {
   private readonly elements: [string, CustomElementConstructor][] = [
     ["sku-app", SkuApp],
     ["sku-box-card", BoxCard],
+    ["sku-stand-view", StandView],
     ["sku-locker-tile", LockerTile],
     ["sku-component-table", ComponentTable],
     ["sku-calibration-list", CalibrationList],

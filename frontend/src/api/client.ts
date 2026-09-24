@@ -4,6 +4,7 @@ import type {
   Box,
   Calibration,
   CalibrationRequest,
+  Cluster,
   Component,
   InventoryEvent,
   Locker,
@@ -14,6 +15,27 @@ import type {
 export class ApiClient extends HttpClient {
   boxes(): Promise<Box[]> {
     return this.get("/api/boxes");
+  }
+
+  clusters(): Promise<Cluster[]> {
+    return this.get("/api/clusters");
+  }
+
+  renameCluster(clusterId: number, name: string): Promise<Cluster> {
+    return this.send(`/api/clusters/${clusterId}`, "PATCH", { name });
+  }
+
+  renameBox(boxId: string, alias: string | null): Promise<Box> {
+    return this.send(`/api/boxes/${encodeURIComponent(boxId)}`, "PATCH", { alias });
+  }
+
+  /** Puts the box next to another box of the stand; no stand starts a new one. The stand is renumbered from A1. */
+  placeBox(boxId: string, clusterId: number | null, x: number, y: number): Promise<Box> {
+    return this.send(`/api/boxes/${encodeURIComponent(boxId)}/placement`, "PUT", { cluster_id: clusterId, x, y });
+  }
+
+  unplaceBox(boxId: string): Promise<Box> {
+    return this.send(`/api/boxes/${encodeURIComponent(boxId)}/placement`, "DELETE");
   }
 
   lockers(): Promise<Locker[]> {
