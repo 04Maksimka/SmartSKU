@@ -220,13 +220,15 @@ class TestAssembly:
         events = await bench.session.scalars(
             select(InventoryEvent).where(InventoryEvent.assembly_id == view.assembly.id).order_by(InventoryEvent.id)
         )
-        assert [(event.event_type, event.nfc_id, event.quantity_after) for event in events] == [
-            (InventoryEventType.ASSEMBLY_STARTED, "s1", None),
-            (InventoryEventType.ASSEMBLY_STARTED, "s2", None),
-            (InventoryEventType.ASSEMBLY_STARTED, "n1", None),
-            (InventoryEventType.ASSEMBLY_COMPLETED, "s1", 0),
-            (InventoryEventType.ASSEMBLY_COMPLETED, "s2", 5),
-            (InventoryEventType.ASSEMBLY_COMPLETED, "n1", 3),
+        assert [(event.event_type, event.box_id, event.nfc_id, event.note) for event in events] == [
+            (InventoryEventType.ASSEMBLY_STARTED, None, None, "Сборка №1 «Стол»: взять 35 шт из ячеек: 3, боксов: 1"),
+            (InventoryEventType.CELL_REMOVED, "box", "s2", None),
+            (InventoryEventType.QUANTITY_CHANGED, "box", "s1", None),
+            (InventoryEventType.CELL_INSERTED, "box", "s2", None),
+            (InventoryEventType.QUANTITY_CHANGED, "box", "s2", None),
+            (InventoryEventType.QUANTITY_CHANGED, "box", "n1", None),
+            (InventoryEventType.QUANTITY_CHANGED, "box", "n1", None),
+            (InventoryEventType.ASSEMBLY_COMPLETED, None, None, "Сборка №1 «Стол» собрана: взято 35 из 35 шт"),
         ]
 
     async def test_cancel_puts_the_displays_back(self, bench: Bench) -> None:

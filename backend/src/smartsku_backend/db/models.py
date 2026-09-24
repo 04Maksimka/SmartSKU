@@ -150,8 +150,8 @@ class InventoryEventType(StrEnum):
     SLOT_SCALED = "slot_scaled"
     CELL_TARED = "cell_tared"
     SCALE_FAILED = "scale_failed"
-    # One record per cell of the assembly: at the start (quantity_before — what was there, note — how many to take)
-    # and at the end (quantity_after — what is left)
+    # One record per order, not tied to a box: the start and the end (note — what and how many); records of the cells
+    # changed during the assembly carry its assembly_id
     ASSEMBLY_STARTED = "assembly_started"
     ASSEMBLY_COMPLETED = "assembly_completed"
     ASSEMBLY_CANCELLED = "assembly_cancelled"
@@ -164,8 +164,9 @@ class InventoryEvent(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     event_type: Mapped[InventoryEventType] = mapped_column(Enum(InventoryEventType, native_enum=False, length=32))
-    box_id: Mapped[str] = mapped_column(ForeignKey("boxes.id"))
-    locker_id: Mapped[int] = mapped_column(Integer)
+    # Null for the records of a whole assembly order
+    box_id: Mapped[str | None] = mapped_column(ForeignKey("boxes.id"))
+    locker_id: Mapped[int | None] = mapped_column(Integer)
     nfc_id: Mapped[str | None] = mapped_column(String(64))
     component_name: Mapped[str | None] = mapped_column(String(255))
     weight: Mapped[float] = mapped_column(Float)
@@ -173,7 +174,7 @@ class InventoryEvent(Base):
     quantity_after: Mapped[int | None] = mapped_column(Integer)
     # Human-readable detail, e.g. why the box could not set up the load cell
     note: Mapped[str | None] = mapped_column(String(255))
-    # The assembly the record belongs to (start and end records)
+    # The assembly the record belongs to: its start and end, and cell records made while it ran
     assembly_id: Mapped[int | None] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=lambda: datetime.now(UTC))
 

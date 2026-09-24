@@ -21,7 +21,7 @@ export class Formatter {
     cell_tared: ["Ячейка взвешена пустой", "info"],
     scale_failed: ["Настройка весов не удалась", "bad"],
     assembly_started: ["Сборка: начало", "info"],
-    assembly_completed: ["Сборка: собрано", "good"],
+    assembly_completed: ["Сборка: собрана", "good"],
     assembly_cancelled: ["Сборка: прервана", "warn"],
   };
 

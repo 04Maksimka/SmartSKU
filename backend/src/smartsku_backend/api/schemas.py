@@ -121,8 +121,8 @@ class CalibrationSchema(OrmSchema):
 class InventoryEventSchema(OrmSchema):
     id: int
     event_type: InventoryEventType
-    box_id: str
-    locker_id: int
+    box_id: str | None = Field(description="Null for the start and end of an assembly order")
+    locker_id: int | None
     nfc_id: str | None
     component_name: str | None
     weight: float

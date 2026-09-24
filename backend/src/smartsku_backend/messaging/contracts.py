@@ -4,12 +4,6 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, Field, field_validator
 
 
-class LedColor(StrEnum):
-    RED = "red"
-    GREEN = "green"
-    NONE = "none"
-
-
 class ScreenMode(StrEnum):
     """What the slot display shows from an indicators command (see firmware CountDisplay.h)."""
 
@@ -149,7 +143,6 @@ class IndicatorsCommand(BaseModel):
     command: Literal["indicators"] = "indicators"
     box_id: str
     locker_id: int
-    led_color: LedColor
     # None: the display shows dashes (no cell, or the cell has no tare or is not calibrated)
     screen_number: int | None
     # Firmware before 0.9.0 ignores it and shows screen_number (dashes for OFF)

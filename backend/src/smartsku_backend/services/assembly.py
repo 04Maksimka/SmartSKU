@@ -207,41 +207,59 @@ class AssemblyTracker:
         return True
 
     def close(self, active: ActiveAssembly, status: AssemblyStatus) -> None:
-        """Marks the end in the journal, one record per cell. The caller commits and then forgets the cache, so
-        the next telemetry puts every display back to counting."""
+        """Marks the end in the journal with one record for the whole order. The caller commits and then forgets
+        the cache, so the next telemetry puts every display back to counting."""
         assembly = active.assembly
         assembly.status = status
         assembly.finished_at = datetime.now(UTC)
-        completed = status is AssemblyStatus.COMPLETED
         for pick in active.picks:
-            quantity = active.confirmed_quantity(pick)
-            pick.final_quantity = quantity
-            taken = pick.start_quantity - quantity
-            verb = "собрана" if completed else "прервана"
-            self._session.add(
-                InventoryEvent(
-                    event_type=InventoryEventType.ASSEMBLY_COMPLETED
-                    if completed
-                    else InventoryEventType.ASSEMBLY_CANCELLED,
-                    box_id=pick.box_id,
-                    locker_id=pick.locker_id,
-                    nfc_id=pick.nfc_id,
-                    component_name=pick.component_name,
-                    weight=0.0,
-                    quantity_before=pick.start_quantity,
-                    quantity_after=quantity,
-                    note=f"{AssemblyNotes.title(assembly)} {verb}: взято {taken} из {pick.quantity}",
-                    assembly_id=assembly.id,
-                )
-            )
+            pick.final_quantity = active.confirmed_quantity(pick)
+        self._session.add(AssemblyJournal.finished(assembly, active.picks))
         logger.info("Assembly %s %s", assembly.id, status.value)
 
 
-class AssemblyNotes:
+class AssemblyJournal:
+    """Records of an order in the inventory journal: one at the start and one at the end, not tied to a slot.
+    What happens to the cells in between are ordinary cell records carrying the assembly_id."""
+
     @staticmethod
     def title(assembly: Assembly) -> str:
         kits = f" ×{assembly.kits}" if assembly.kits > 1 else ""
         return f"Сборка №{assembly.id} «{assembly.name}»{kits}"
+
+    @staticmethod
+    def started(assembly: Assembly, picks: list[AssemblyPick]) -> InventoryEvent:
+        boxes = len({pick.box_id for pick in picks})
+        required = sum(pick.quantity for pick in picks)
+        note = f"{AssemblyJournal.title(assembly)}: взять {required} шт из ячеек: {len(picks)}, боксов: {boxes}"
+        return AssemblyJournal._record(InventoryEventType.ASSEMBLY_STARTED, assembly, note)
+
+    @staticmethod
+    def finished(assembly: Assembly, picks: list[AssemblyPick]) -> InventoryEvent:
+        completed = assembly.status is AssemblyStatus.COMPLETED
+        required = sum(pick.quantity for pick in picks)
+        taken = sum(pick.start_quantity - (pick.final_quantity or 0) for pick in picks)
+        verb = "собрана" if completed else "прервана"
+        return AssemblyJournal._record(
+            InventoryEventType.ASSEMBLY_COMPLETED if completed else InventoryEventType.ASSEMBLY_CANCELLED,
+            assembly,
+            f"{AssemblyJournal.title(assembly)} {verb}: взято {taken} из {required} шт",
+        )
+
+    @staticmethod
+    def _record(event_type: InventoryEventType, assembly: Assembly, note: str) -> InventoryEvent:
+        return InventoryEvent(
+            event_type=event_type,
+            box_id=None,
+            locker_id=None,
+            nfc_id=None,
+            component_name=None,
+            weight=0.0,
+            quantity_before=None,
+            quantity_after=None,
+            note=note,
+            assembly_id=assembly.id,
+        )
 
 
 class AssemblyService:
@@ -275,7 +293,9 @@ class AssemblyService:
     async def start(self, specification_id: int, kits: int) -> AssemblyView:
         running = await self._tracker.active()
         if running is not None:
-            raise ConflictError(f"Уже идёт {AssemblyNotes.title(running.assembly).lower()}: завершите или прервите её")
+            raise ConflictError(
+                f"Уже идёт {AssemblyJournal.title(running.assembly).lower()}: завершите или прервите её"
+            )
         report = await self.availability(specification_id, kits)
         if not report.ok:
             raise ConflictError(report.shortage_text())
@@ -283,6 +303,7 @@ class AssemblyService:
         assembly = Assembly(specification_id=specification_id, name=report.name, kits=kits)
         self._session.add(assembly)
         await self._session.flush()
+        picks: list[AssemblyPick] = []
         for item in report.items:
             need = item.required
             for cell in item.cells:
@@ -302,20 +323,8 @@ class AssemblyService:
                     start_quantity=cell.quantity,
                 )
                 self._session.add(pick)
-                self._session.add(
-                    InventoryEvent(
-                        event_type=InventoryEventType.ASSEMBLY_STARTED,
-                        box_id=pick.box_id,
-                        locker_id=pick.locker_id,
-                        nfc_id=pick.nfc_id,
-                        component_name=cell.component.name,
-                        weight=0.0,
-                        quantity_before=pick.start_quantity,
-                        quantity_after=None,
-                        note=f"{AssemblyNotes.title(assembly)}: взять {take}",
-                        assembly_id=assembly.id,
-                    )
-                )
+                picks.append(pick)
+        self._session.add(AssemblyJournal.started(assembly, picks))
         await self._session.commit()
         # Every box resends its indicators with the next telemetry: the assembly takes over the displays
         self._cache.forget_all()

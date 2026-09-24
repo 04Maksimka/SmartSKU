@@ -6,12 +6,11 @@
 #include "AppConfig.h"
 #include "BoxStorage.h"
 #include "CountDisplay.h"
-#include "IndicatorLed.h"
 #include "LoadCell.h"
 #include "LoadCellBus.h"
 #include "NfcReader.h"
 
-// Умная ячейка: тензодатчик + NFC + дисплей + светодиод.
+// Умная ячейка: тензодатчик + NFC + дисплей.
 // Слот (тензодатчик в корпусе) знает свой ноль и масштаб — отсчётов HX711 на грамм, знак масштаба — направление
 // датчика. Их задаёт настройка весов эталонной гирей, хранятся в NVS. Ячейка (NFC-метка) хранит свою тару и вес штуки
 // в граммах, поэтому её можно переставить в любой слот любого бокса:
@@ -60,7 +59,7 @@ public:
   // Что показывает дисплей по команде бэкенда (screen_mode): количество, задание сборки или ничего
   enum class ScreenMode { Count, Off, Take, Put };
   static ScreenMode parseScreenMode(const String &name);
-  bool applyIndicators(const String &ledColor, ScreenMode mode, bool hasNumber, int screenNumber);
+  void applyIndicators(ScreenMode mode, bool hasNumber, int screenNumber);
   // Нет связи с бэкендом — дисплей показывает количество, посчитанное самим боксом
   void setBackendOnline(bool online);
   // true один раз после итога настройки или калибровки; event — отчёт для топика events (box_id добавляет BoxApp)
@@ -118,7 +117,6 @@ private:
   LoadCell loadCell_;
   NfcReader nfc_;
   CountDisplay display_;
-  IndicatorLed led_;
 
   bool hasZero_ = false;
   double zeroRaw_ = 0;

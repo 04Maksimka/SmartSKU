@@ -9,8 +9,7 @@ Locker::Locker(uint8_t lockerId, const LockerHardware &hardware, BoxStorage &sto
     storage_(storage),
     loadCellBus_(loadCellBus),
     nfc_(hardware.rfidSs),
-    display_(AppConfig::DISPLAY_CLK, hardware.displayDio),
-    led_(hardware.ledRed, hardware.ledGreen) {}
+    display_(AppConfig::DISPLAY_CLK, hardware.displayDio) {}
 
 void Locker::deselectNfc() {
   nfc_.deselect();
@@ -18,7 +17,6 @@ void Locker::deselectNfc() {
 
 void Locker::begin() {
   display_.begin(AppConfig::DISPLAY_BRIGHTNESS);
-  led_.begin();
   loadCellBus_.attach(hardware_.hxDout, loadCell_);
   loadCell_.begin();
   nfc_.begin(id_);
@@ -436,13 +434,12 @@ Locker::ScreenMode Locker::parseScreenMode(const String &name) {
   return ScreenMode::Count;
 }
 
-bool Locker::applyIndicators(const String &ledColor, ScreenMode mode, bool hasNumber, int screenNumber) {
+void Locker::applyIndicators(ScreenMode mode, bool hasNumber, int screenNumber) {
   hasScreenCommand_ = true;
   screenMode_ = mode;
   screenBlank_ = !hasNumber;
   screenNumber_ = screenNumber;
   refreshDisplay();
-  return led_.apply(ledColor);
 }
 
 void Locker::setBackendOnline(bool online) {
@@ -592,7 +589,6 @@ void Locker::fillHardwareInfo(JsonObject info) const {
   info["load_cell"] = hardware_.hxDout >= 0 && windowReady_ && !loadCell_.failed();
   info["nfc_reader"] = nfc_.chipFound();
   info["display"] = AppConfig::DISPLAY_CLK >= 0 && hardware_.displayDio >= 0;
-  info["led"] = hardware_.ledRed >= 0 || hardware_.ledGreen >= 0;
   info["slot_ready"] = slotReady();
   info["cell"] = nfc_.present() ? nfc_.uid() : String();
 }

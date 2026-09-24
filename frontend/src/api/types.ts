@@ -112,8 +112,9 @@ export type InventoryEventType =
 export interface InventoryEvent {
   id: number;
   event_type: InventoryEventType;
-  box_id: string;
-  locker_id: number;
+  /** Null for the start and end of an assembly order. */
+  box_id: string | null;
+  locker_id: number | null;
   nfc_id: string | null;
   component_name: string | null;
   weight: number;
@@ -122,7 +123,7 @@ export interface InventoryEvent {
   quantity_delta: number | null;
   /** Detail such as why the box could not set up the load cell. */
   note: string | null;
-  /** The assembly a start or end record belongs to. */
+  /** The assembly: its start and end, and records of its cells made while it ran. */
   assembly_id: number | null;
   created_at: string;
 }

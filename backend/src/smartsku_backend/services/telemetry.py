@@ -45,6 +45,8 @@ class TelemetryService:
         self._assemblies = assemblies
         # Slots whose assembly task moved away with the cell: their displays are refreshed after this message
         self._left_slots: list[tuple[str, int]] = []
+        # The running assembly: journal records of its cells carry its id
+        self._assembly: ActiveAssembly | None = None
         self._config = config
         self._clock = clock
 
@@ -63,7 +65,7 @@ class TelemetryService:
             logger.warning("Telemetry from unknown box %s ignored", box_id)
             return
 
-        assembly = await self._assemblies.active()
+        assembly = self._assembly = await self._assemblies.active()
         commands = [await self._apply(box_id, reading, now, assembly) for reading in readings]
         recorded = False
         for reading in message.lockers:
@@ -214,5 +216,10 @@ class TelemetryService:
                 weight=weight,
                 quantity_before=before,
                 quantity_after=after,
+                assembly_id=self._assembly_of(nfc_id),
             )
         )
+
+    def _assembly_of(self, nfc_id: str) -> int | None:
+        assembly = self._assembly
+        return assembly.assembly.id if assembly is not None and assembly.pick_for_cell(nfc_id) else None

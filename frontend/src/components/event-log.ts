@@ -179,10 +179,20 @@ export class EventLog extends LitElement {
           ${item.note ? html`<div class="note muted">${item.note}</div>` : nothing}
         </td>
         <td class="component">
+          ${item.box_id === null
+            ? html`<span class="muted">весь заказ</span>`
+            : nothing}
           ${item.component_name ?? (item.nfc_id ? html`<span class="muted">не откалибрована</span>` : nothing)}
           ${item.nfc_id ? html`<div class="muted mono">${item.nfc_id}</div>` : nothing}
         </td>
-        <td class="where nowrap">${this.format.location(this.boxNames.get(item.box_id) ?? item.box_id, item.locker_id)}</td>
+        <td class="where nowrap">
+          ${item.box_id === null || item.locker_id === null
+            ? html`<span class="muted">—</span>`
+            : this.format.location(this.boxNames.get(item.box_id) ?? item.box_id, item.locker_id)}
+          ${item.assembly_id !== null && item.box_id !== null
+            ? html`<div class="muted">сборка №${item.assembly_id}</div>`
+            : nothing}
+        </td>
         <td class="qty num end ${item.quantity_before === null && item.quantity_after === null ? "phone-hidden" : ""}">
           ${this.renderChange(item)}
         </td>
@@ -195,10 +205,6 @@ export class EventLog extends LitElement {
   private renderChange(item: InventoryEvent) {
     if (item.quantity_before === null && item.quantity_after === null) {
       return html`<span class="muted">—</span>`;
-    }
-    if (item.event_type === "assembly_started") {
-      // What the cell held when the assembly started; how many to take is in the note
-      return html`<span class="muted">было ${this.format.pieces(item.quantity_before)}</span>`;
     }
     const range = html`<span class="muted">${item.quantity_before ?? "—"} → ${item.quantity_after ?? "—"}</span>`;
     if (item.quantity_delta === null || item.quantity_delta === 0) {
