@@ -3,10 +3,32 @@
 {$SMARTSKU_DOMAIN} {
 	encode gzip
 
-	basic_auth {
-		{$SMARTSKU_DASHBOARD_USER} {$SMARTSKU_DASHBOARD_PASSWORD_HASH}
+	# Guest link for a demo (jury, customers): https://<domain>/?guest=<SMARTSKU_GUEST_TOKEN> sets a cookie and opens
+	# the dashboard without the password, with full rights, until SMARTSKU_GUEST_UNTIL (unix time). After that both
+	# the link and the cookie stop working by themselves. No token (shorter than 16 characters) — no guest access.
+	@guest_link {
+		query guest={$SMARTSKU_GUEST_TOKEN:none}
+		expression `size("{$SMARTSKU_GUEST_TOKEN:none}") >= 16 && int({time.now.unix}) < {$SMARTSKU_GUEST_UNTIL:0}`
+	}
+	handle @guest_link {
+		header Set-Cookie "skubox_guest={$SMARTSKU_GUEST_TOKEN:none}; Path=/; Max-Age=172800; Secure; HttpOnly; SameSite=Lax"
+		# Drops the token from the address bar
+		redir / 302
 	}
 
-	# The frontend's nginx serves the page and proxies /api to the backend
-	reverse_proxy frontend:80
+	@guest {
+		header Cookie *skubox_guest={$SMARTSKU_GUEST_TOKEN:none}*
+		expression `size("{$SMARTSKU_GUEST_TOKEN:none}") >= 16 && int({time.now.unix}) < {$SMARTSKU_GUEST_UNTIL:0}`
+	}
+	handle @guest {
+		reverse_proxy frontend:80
+	}
+
+	handle {
+		basic_auth {
+			{$SMARTSKU_DASHBOARD_USER} {$SMARTSKU_DASHBOARD_PASSWORD_HASH}
+		}
+		# The frontend's nginx serves the page and proxies /api to the backend
+		reverse_proxy frontend:80
+	}
 }
