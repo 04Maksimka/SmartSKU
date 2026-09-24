@@ -176,6 +176,17 @@ export interface Availability {
   items: ItemAvailability[];
 }
 
+/** The component the user is looking for: the displays of its cells blink. */
+export interface Locate {
+  component_name: string;
+  /** The displays blink this much longer. */
+  seconds_left: number;
+  /** Cells of the component in slots now. */
+  cells: StockCell[];
+  /** Pieces in its cells that are pulled out. */
+  elsewhere: number;
+}
+
 export type AssemblyStatus = "active" | "completed" | "cancelled";
 
 /** How many pieces to take from one cell; box_id and locker_id follow the cell into another slot. */

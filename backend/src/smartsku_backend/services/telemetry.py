@@ -10,6 +10,7 @@ from smartsku_backend.messaging.publisher import CommandPublisher
 from smartsku_backend.services.assembly import ActiveAssembly, AssemblyTracker
 from smartsku_backend.services.clock import MonotonicClock
 from smartsku_backend.services.indicators import IndicatorPolicy
+from smartsku_backend.services.locate import ComponentLocator
 from smartsku_backend.services.runtime_cache import LockerRuntimeCache, SlotObservation
 
 logger = logging.getLogger(__name__)
@@ -33,8 +34,9 @@ class TelemetryService:
         cache: LockerRuntimeCache,
         indicator_policy: IndicatorPolicy,
         publisher: CommandPublisher,
-        assemblies: AssemblyTracker,
         *,
+        assemblies: AssemblyTracker,
+        locator: ComponentLocator,
         config: TelemetryConfig,
         clock: MonotonicClock,
     ) -> None:
@@ -43,6 +45,7 @@ class TelemetryService:
         self._indicator_policy = indicator_policy
         self._publisher = publisher
         self._assemblies = assemblies
+        self._locator = locator
         # Slots whose assembly task moved away with the cell: their displays are refreshed after this message
         self._left_slots: list[tuple[str, int]] = []
         # The running assembly: journal records of its cells carry its id
@@ -53,6 +56,9 @@ class TelemetryService:
     async def handle(self, message: BoxDataMessage) -> None:
         box_id = message.box_id
         now = self._clock.now()
+        if self._locator.take_expired():
+            # The search ran out: every box reprocesses its readings and stops blinking
+            self._cache.forget_all()
         readings = [
             reading
             for reading in message.lockers
@@ -108,8 +114,9 @@ class TelemetryService:
         state.quantity = quantity
         state.updated_at = datetime.now(UTC)
         self._observe(state, SlotObservation(nfc_id, quantity, state.weight), now)
+        blink = reading.nfc_flag and component is not None and self._locator.matches(component.name)
         if assembly is None:
-            return self._indicator_policy.build(box_id, reading.locker_id, reading.nfc_flag, quantity)
+            return self._indicator_policy.build(box_id, reading.locker_id, reading.nfc_flag, quantity, blink=blink)
         pick = assembly.pick_for_cell(nfc_id)
         if pick is not None and (pick.box_id, pick.locker_id) != (box_id, reading.locker_id):
             self._left_slots.append(self._assemblies.follow_cell(assembly, pick, box_id, reading.locker_id))
@@ -120,6 +127,7 @@ class TelemetryService:
             quantity,
             assembling=True,
             remaining=assembly.remaining_for(box_id, reading.locker_id, nfc_id, quantity),
+            blink=blink,
         )
 
     def _observe(self, state: LockerState, observation: SlotObservation, now: float) -> None:

@@ -20,6 +20,8 @@ from smartsku_backend.api.schemas import (
     ComponentSchema,
     InventoryEventSchema,
     ItemAvailabilitySchema,
+    LocateRequest,
+    LocateSchema,
     LockerSchema,
     OnboardingSettingsSchema,
     ScaleRequest,
@@ -35,6 +37,7 @@ from smartsku_backend.services.assembly import AssemblyService, AssemblyView
 from smartsku_backend.services.calibration import CalibrationService
 from smartsku_backend.services.inventory import ComponentService, InventoryQueryService
 from smartsku_backend.services.layout import LayoutService
+from smartsku_backend.services.locate import LocateService, LocateView
 from smartsku_backend.services.provisioning import ProvisioningService
 from smartsku_backend.services.scale import ScaleService
 from smartsku_backend.services.specifications import SpecificationLine, SpecificationService, SpecificationView
@@ -367,4 +370,44 @@ class AssembliesController:
                 )
                 for item in view.picks
             ],
+        )
+
+
+class LocateController:
+    """Finding a component on the stands: its cells light up on the dashboard and their displays blink."""
+
+    def __init__(self) -> None:
+        self.router = APIRouter(prefix="/api/locate", tags=["locate"], route_class=DishkaRoute)
+        self.router.add_api_route("", self.current, methods=["GET"], response_model=LocateSchema | None)
+        self.router.add_api_route("", self.start, methods=["POST"], response_model=LocateSchema)
+        self.router.add_api_route("", self.stop, methods=["DELETE"], status_code=status.HTTP_204_NO_CONTENT)
+
+    async def current(self, locate: FromDishka[LocateService]) -> LocateSchema | None:
+        """The component being looked for now, or null."""
+        view = await locate.current()
+        return self._schema(view) if view is not None else None
+
+    async def start(self, request: LocateRequest, locate: FromDishka[LocateService]) -> LocateSchema:
+        """Blinks the displays of every cell holding this component (by name) for locate.seconds; 404 — no such
+        component. A new search replaces the previous one."""
+        return self._schema(await locate.start(request.component_name.strip()))
+
+    async def stop(self, locate: FromDishka[LocateService]) -> None:
+        locate.stop()
+
+    def _schema(self, view: LocateView) -> LocateSchema:
+        return LocateSchema(
+            component_name=view.name,
+            seconds_left=round(view.seconds_left, 1),
+            cells=[
+                StockCellSchema(
+                    box_id=cell.state.box_id,
+                    locker_id=cell.state.locker_id,
+                    nfc_id=cell.component.nfc_id,
+                    quantity=cell.quantity,
+                )
+                for cell in view.cells
+                if cell.state is not None
+            ],
+            elsewhere=view.elsewhere,
         )

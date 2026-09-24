@@ -7,6 +7,7 @@ import type {
   Cluster,
   Component,
   InventoryEvent,
+  Locate,
   Locker,
   Specification,
 } from "../api/types";
@@ -20,6 +21,8 @@ export interface LockerOverview {
   lastRemoval: InventoryEvent | null;
   /** Set while an assembly runs: the slot's task, or no task — its display is dark. */
   assembly: SlotAssembly | null;
+  /** A component is being looked for: "match" — it lies here and the display blinks, "other" — not here. */
+  search: "match" | "other" | null;
 }
 
 /** What the running assembly asks of a slot, as its display shows it (backend IndicatorPolicy). */
@@ -63,6 +66,8 @@ export interface DashboardSnapshot {
   assemblies: Assembly[];
   /** The assembly that runs now: it takes over the displays of all boxes. */
   activeAssembly: Assembly | null;
+  /** The component being looked for, its cells blink. */
+  locate: Locate | null;
   /** Names of calibrated components, each once: what a specification can ask for. */
   componentNames: string[];
   boxNames: Map<string, string>;
@@ -85,6 +90,7 @@ export class DashboardStore {
     specifications: [],
     assemblies: [],
     activeAssembly: null,
+    locate: null,
     componentNames: [],
     boxNames: new Map(),
     updatedAt: null,
@@ -143,7 +149,7 @@ export class DashboardStore {
 
   private async refresh(): Promise<void> {
     try {
-      const [boxes, clusters, lockers, components, calibrations, events, specifications, assemblies] =
+      const [boxes, clusters, lockers, components, calibrations, events, specifications, assemblies, locate] =
         await Promise.all([
           this.api.boxes(),
           this.api.clusters(),
@@ -153,9 +159,10 @@ export class DashboardStore {
           this.api.events(this.config.eventsLimit),
           this.api.specifications(),
           this.api.assemblies(this.config.assembliesLimit),
+          this.api.locate(),
         ]);
       this.snapshot = {
-        ...this.build(boxes, clusters, lockers, components, calibrations, events, assemblies),
+        ...this.build(boxes, clusters, lockers, components, calibrations, events, assemblies, locate),
         specifications,
       };
     } catch (error) {
@@ -174,6 +181,7 @@ export class DashboardStore {
     calibrations: Calibration[],
     events: InventoryEvent[],
     assemblies: Assembly[],
+    locate: Locate | null,
   ): DashboardSnapshot {
     const activeAssembly = assemblies.find((item) => item.status === "active") ?? null;
     const boxNames = new Map(boxes.map((box) => [box.id, this.boxName(box, clusters)]));
@@ -194,6 +202,12 @@ export class DashboardStore {
               event.locker_id === locker.locker_id,
           ) ?? null),
       assembly: activeAssembly ? { assembly: activeAssembly, pick: this.pickOf(activeAssembly, locker) } : null,
+      search:
+        locate === null
+          ? null
+          : locate.cells.some((cell) => cell.box_id === locker.box_id && cell.locker_id === locker.locker_id)
+            ? "match"
+            : "other",
     }));
 
     const boxOverviews = boxes.map<BoxOverview>((box) => ({
@@ -224,6 +238,7 @@ export class DashboardStore {
       specifications: this.snapshot.specifications,
       assemblies,
       activeAssembly,
+      locate,
       componentNames: [...new Set(components.map((component) => component.name))].sort((left, right) =>
         left.localeCompare(right, "ru"),
       ),

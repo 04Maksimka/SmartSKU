@@ -14,6 +14,7 @@ from smartsku_backend.api.controllers import (
     CalibrationController,
     ComponentsController,
     LayoutController,
+    LocateController,
     OnboardingController,
     SpecificationsController,
 )
@@ -41,6 +42,7 @@ class ApplicationFactory:
             OnboardingController(),
             SpecificationsController(),
             AssembliesController(),
+            LocateController(),
         )
         for controller in controllers:
             app.include_router(controller.router)

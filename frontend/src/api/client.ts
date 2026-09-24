@@ -4,6 +4,7 @@ import type {
   Assembly,
   Availability,
   Box,
+  Locate,
   Calibration,
   CalibrationRequest,
   Cluster,
@@ -113,6 +114,20 @@ export class ApiClient extends HttpClient {
   /** Fails with the missing components when the stock is short, or when another assembly runs. */
   startAssembly(specificationId: number, kits: number): Promise<Assembly> {
     return this.send("/api/assemblies", "POST", { specification_id: specificationId, kits });
+  }
+
+  /** The component being looked for now, or null. */
+  locate(): Promise<Locate | null> {
+    return this.get("/api/locate");
+  }
+
+  /** Blinks the displays of every cell holding this component for a minute. */
+  startLocate(componentName: string): Promise<Locate> {
+    return this.send("/api/locate", "POST", { component_name: componentName });
+  }
+
+  stopLocate(): Promise<void> {
+    return this.send("/api/locate", "DELETE");
   }
 
   cancelAssembly(assemblyId: number): Promise<Assembly> {

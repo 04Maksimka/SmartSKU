@@ -176,6 +176,17 @@ class AvailabilitySchema(BaseModel):
     items: list[ItemAvailabilitySchema]
 
 
+class LocateRequest(BaseModel):
+    component_name: str = Field(min_length=1, max_length=255)
+
+
+class LocateSchema(BaseModel):
+    component_name: str
+    seconds_left: float = Field(description="The displays blink this much longer")
+    cells: list[StockCellSchema] = Field(description="Cells of the component in slots now: their displays blink")
+    elsewhere: int = Field(description="Pieces in its cells that are pulled out")
+
+
 class AssemblyRequest(BaseModel):
     specification_id: int
     kits: int = Field(default=1, gt=0, le=1000, description="How many products to assemble at once")

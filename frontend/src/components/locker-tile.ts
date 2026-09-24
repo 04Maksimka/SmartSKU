@@ -61,8 +61,36 @@ export class LockerTile extends LitElement {
         border-color: var(--tone-good);
       }
 
-      .tile.task-none {
+      .tile.task-none,
+      .tile.not-found {
         opacity: 0.5;
+      }
+
+      /* Search: the tile stands out, the display replica blinks like the real one */
+      .tile.found {
+        border: 2px solid var(--accent);
+        box-shadow: 0 0 0 3px var(--accent-soft);
+      }
+
+      .found-label {
+        margin: 8px 8px 0;
+        padding: 6px 10px;
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: 600;
+        background: var(--accent-soft);
+      }
+
+      @media (prefers-reduced-motion: no-preference) {
+        .tile.found .display-panel sku-segment-display {
+          animation: blink 0.8s steps(1, end) infinite;
+        }
+      }
+
+      @keyframes blink {
+        50% {
+          opacity: 0;
+        }
       }
 
       .task {
@@ -352,12 +380,15 @@ export class LockerTile extends LitElement {
   protected override render() {
     const { locker } = this.overview;
     return html`
-      <div class="tile ${locker.nfc_flag ? "" : "out"} ${this.taskClass()}">
+      <div class="tile ${locker.nfc_flag ? "" : "out"} ${this.taskClass()} ${this.searchClass()}">
         <div class="head">
           <span class="slot">Слот ${this.format.slot(locker.locker_id)}</span>
           ${this.renderPresence()}
         </div>
         ${this.renderDisplay()} ${this.renderTask()}
+        ${this.overview.search === "match"
+          ? html`<div class="found-label">🔍 Ищем: дисплей мигает</div>`
+          : nothing}
         <div class="details">
           ${locker.nfc_flag ? this.renderInserted() : this.renderPulledOut()}
           ${locker.calibration ? this.renderCalibration() : this.renderSetupNote()}
@@ -450,6 +481,11 @@ export class LockerTile extends LitElement {
     >
       Откалибровать
     </button>`;
+  }
+
+  private searchClass(): string {
+    const search = this.overview.search;
+    return search === "match" ? "found" : search === "other" ? "not-found" : "";
   }
 
   private taskClass(): string {

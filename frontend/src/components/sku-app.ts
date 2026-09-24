@@ -165,6 +165,30 @@ export class SkuApp extends LitElement {
         font-family: var(--mono);
       }
 
+      .locate-banner {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 10px 16px;
+        margin-bottom: 20px;
+        padding: 12px 14px;
+        border: 2px solid var(--accent);
+      }
+
+      .locate-banner .where {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 6px;
+      }
+
+      .locate-banner .where button {
+        padding: 3px 9px;
+        font-family: var(--mono);
+        font-size: 12.5px;
+      }
+
       .theme-switch {
         width: 34px;
         height: 34px;
@@ -472,6 +496,7 @@ export class SkuApp extends LitElement {
     this.addEventListener(DashboardEvents.PLACE_AT, this.handlePlaceAt);
     this.addEventListener(DashboardEvents.RENAME_CLUSTER, this.handleRenameCluster);
     this.addEventListener(DashboardEvents.CANCEL_ASSEMBLY, this.handleCancelAssembly);
+    this.addEventListener(DashboardEvents.LOCATE, this.handleLocate);
     window.addEventListener("hashchange", this.handleHashChange);
     window.addEventListener("keydown", this.handleKeydown);
   }
@@ -491,6 +516,26 @@ export class SkuApp extends LitElement {
     this.removeEventListener(DashboardEvents.PLACE_AT, this.handlePlaceAt);
     this.removeEventListener(DashboardEvents.RENAME_CLUSTER, this.handleRenameCluster);
     this.removeEventListener(DashboardEvents.CANCEL_ASSEMBLY, this.handleCancelAssembly);
+    this.removeEventListener(DashboardEvents.LOCATE, this.handleLocate);
+  }
+
+  /** Lights up the component's cells and opens the stand map on the first box holding it. */
+  private readonly handleLocate = (event: Event): void => {
+    const name = (event as CustomEvent<string>).detail;
+    void this.run(async () => {
+      const locate = await this.commands.startLocate(name);
+      const first = [...locate.cells].sort((left, right) =>
+        this.boxName(left.box_id).localeCompare(this.boxName(right.box_id), "ru", { numeric: true }),
+      )[0];
+      if (first) {
+        this.selectedBoxId = first.box_id;
+        location.hash = "boxes";
+      }
+    });
+  };
+
+  private boxName(boxId: string): string {
+    return this.snapshot.boxNames.get(boxId) ?? boxId;
   }
 
   private readonly handleCancelAssembly = (event: Event): void => {
@@ -708,7 +753,7 @@ export class SkuApp extends LitElement {
       ${snapshot.error
         ? html`<div class="error">Не удалось обновить данные: ${snapshot.error}. Показаны последние полученные.</div>`
         : nothing}
-      ${this.renderAssemblyBanner()}
+      ${this.renderLocateBanner()} ${this.renderAssemblyBanner()}
 
       ${this.renderTab()}
 
@@ -727,6 +772,45 @@ export class SkuApp extends LitElement {
 
       <sku-box-setup-dialog .service=${this.commands}></sku-box-setup-dialog>
     `;
+  }
+
+  /** The component being looked for and where it lies; tapping a place opens that box. */
+  private renderLocateBanner() {
+    const locate = this.snapshot.locate;
+    if (locate === null) {
+      return nothing;
+    }
+    const cells = [...locate.cells].sort(
+      (left, right) =>
+        this.boxName(left.box_id).localeCompare(this.boxName(right.box_id), "ru", { numeric: true }) ||
+        left.locker_id - right.locker_id,
+    );
+    return html`<div class="card locate-banner">
+      <div>
+        <b>🔍 Ищем «${locate.component_name}»</b>
+        <span class="muted">
+          ${cells.length
+            ? `— дисплеи этих ячеек мигают ещё ${Math.ceil(locate.seconds_left)} с`
+            : "— все ячейки с ним сейчас вынуты"}${locate.elsewhere ? ` · ещё ${locate.elsewhere} шт вне стенда` : ""}
+        </span>
+        ${cells.length
+          ? html`<div class="where">
+              ${cells.map(
+                (cell) => html`<button
+                  title="Открыть бокс"
+                  @click=${() => {
+                    this.selectedBoxId = cell.box_id;
+                    location.hash = "boxes";
+                  }}
+                >
+                  ${this.format.location(this.boxName(cell.box_id), cell.locker_id)} · ${cell.quantity} шт
+                </button>`,
+              )}
+            </div>`
+          : nothing}
+      </div>
+      <button @click=${() => void this.run(() => this.commands.stopLocate())}>Остановить</button>
+    </div>`;
   }
 
   private renderAssemblyBanner() {
@@ -763,7 +847,10 @@ export class SkuApp extends LitElement {
       case "components":
         return html`
           <section>
-            <sku-component-table .items=${snapshot.components}></sku-component-table>
+            <sku-component-table
+              .items=${snapshot.components}
+              .locateName=${snapshot.locate?.component_name ?? null}
+            ></sku-component-table>
           </section>
         `;
       case "journal":

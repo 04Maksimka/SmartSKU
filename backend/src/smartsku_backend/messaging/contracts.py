@@ -147,6 +147,8 @@ class IndicatorsCommand(BaseModel):
     screen_number: int | None
     # Firmware before 0.9.0 ignores it and shows screen_number (dashes for OFF)
     screen_mode: ScreenMode = ScreenMode.COUNT
+    # The user is looking for this cell: the display blinks showing the same (firmware 0.10.0+)
+    blink: bool = False
 
 
 class ProvisionRequest(BaseModel):

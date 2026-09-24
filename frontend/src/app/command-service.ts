@@ -5,6 +5,7 @@ import type {
   Availability,
   Box,
   Calibration,
+  Locate,
   CalibrationRequest,
   ScaleAction,
   ScaleResult,
@@ -102,6 +103,17 @@ export class CommandService {
     const assembly = await this.api.startAssembly(specificationId, kits);
     await this.store.refreshNow();
     return assembly;
+  }
+
+  async startLocate(componentName: string): Promise<Locate> {
+    const locate = await this.api.startLocate(componentName);
+    await this.store.refreshNow();
+    return locate;
+  }
+
+  async stopLocate(): Promise<void> {
+    await this.api.stopLocate();
+    await this.store.refreshNow();
   }
 
   async cancelAssembly(assemblyId: number): Promise<void> {

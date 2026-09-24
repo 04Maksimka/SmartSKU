@@ -8,13 +8,14 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from smartsku_backend.config import DatabaseConfig, TelemetryConfig
+from smartsku_backend.config import DatabaseConfig, LocateConfig, TelemetryConfig
 from smartsku_backend.db.database import Database
 from smartsku_backend.db.models import AssemblyStatus, Box, Component, InventoryEvent, InventoryEventType
 from smartsku_backend.messaging.contracts import BoxDataMessage, IndicatorsCommand, LockerReading, ScreenMode
 from smartsku_backend.services.assembly import AssemblyService, AssemblyTracker, StockService
-from smartsku_backend.services.errors import ConflictError
+from smartsku_backend.services.errors import ConflictError, NotFoundError
 from smartsku_backend.services.indicators import IndicatorPolicy
+from smartsku_backend.services.locate import ComponentLocator, LocateService
 from smartsku_backend.services.runtime_cache import LockerRuntimeCache
 from smartsku_backend.services.specifications import SpecificationLine, SpecificationService
 from smartsku_backend.services.telemetry import TelemetryService
@@ -27,6 +28,9 @@ class FakePublisher:
     async def send_indicators(self, command: IndicatorsCommand) -> bool:
         self.indicators[command.locker_id] = command
         return True
+
+    def blinking(self) -> list[bool]:
+        return [self.indicators[locker_id].blink for locker_id in range(4)]
 
     def screen(self, locker_id: int) -> tuple[ScreenMode, int | None]:
         command = self.indicators[locker_id]
@@ -49,6 +53,7 @@ class Bench:
     publisher: FakePublisher
     specifications: SpecificationService
     assemblies: AssemblyService
+    locate: LocateService
 
 
 class TestAssembly:
@@ -92,15 +97,25 @@ class TestAssembly:
         return FakePublisher()
 
     @pytest.fixture
+    def locator(self, clock: FakeClock) -> ComponentLocator:
+        return ComponentLocator(LocateConfig(seconds=60), clock)  # type: ignore[arg-type]
+
+    @pytest.fixture
     def telemetry(
-        self, session: AsyncSession, cache: LockerRuntimeCache, publisher: FakePublisher, clock: FakeClock
+        self,
+        session: AsyncSession,
+        cache: LockerRuntimeCache,
+        publisher: FakePublisher,
+        clock: FakeClock,
+        locator: ComponentLocator,
     ) -> TelemetryService:
         return TelemetryService(
             session,
             cache,
             IndicatorPolicy(),
             publisher,  # type: ignore[arg-type]
-            AssemblyTracker(session),
+            assemblies=AssemblyTracker(session),
+            locator=locator,
             config=TelemetryConfig(weight_change_threshold=0.1, confirm_seconds=self.CONFIRM_SECONDS),
             clock=clock,
         )
@@ -108,15 +123,19 @@ class TestAssembly:
     @pytest.fixture
     def bench(
         self,
+        *,
         session: AsyncSession,
         telemetry: TelemetryService,
         cache: LockerRuntimeCache,
         publisher: FakePublisher,
         clock: FakeClock,
+        locator: ComponentLocator,
     ) -> Bench:
         specifications = SpecificationService(session)
-        assemblies = AssemblyService(session, specifications, StockService(session), AssemblyTracker(session), cache)
-        return Bench(session, telemetry, clock, publisher, specifications, assemblies)
+        stock = StockService(session)
+        assemblies = AssemblyService(session, specifications, stock, AssemblyTracker(session), cache)
+        locate = LocateService(locator, stock, cache)
+        return Bench(session, telemetry, clock, publisher, specifications, assemblies, locate)
 
     async def _send(self, bench: Bench, pieces: dict[str, int | None], seconds: float = 0) -> None:
         """The box reports its four slots (in this order) every 0.5 s for this long; None — the cell is pulled out."""
@@ -260,3 +279,29 @@ class TestAssembly:
         await self._send(bench, {"s1": 20, "s2": 15, "w1": None, "n1": 6}, self.CONFIRM_SECONDS)
         assert bench.publisher.screen(3) == (ScreenMode.TAKE, 3)
         assert bench.publisher.screen(2) == (ScreenMode.OFF, None)
+
+    async def test_located_component_blinks_in_all_its_cells_until_the_time_runs_out(self, bench: Bench) -> None:
+        await self._hold(bench, s1=20, s2=15, n1=8, w1=50)
+        with pytest.raises(NotFoundError):
+            await bench.locate.start("Саморез")
+
+        view = await bench.locate.start("ШУРУП 4x30")
+        assert sorted(cell.component.nfc_id for cell in view.cells) == ["s1", "s2"]
+        await self._send(bench, {"s1": 20, "s2": 15, "n1": 8, "w1": 50})
+        assert bench.publisher.blinking() == [True, True, False, False]
+        # Blinking keeps the count on the display
+        assert self._screens(bench)[:2] == [(ScreenMode.COUNT, 20), (ScreenMode.COUNT, 15)]
+
+        bench.clock.seconds += 61
+        await self._send(bench, {"s1": 20, "s2": 15, "n1": 8, "w1": 50})
+        assert bench.publisher.blinking() == [False, False, False, False]
+        assert await bench.locate.current() is None
+
+    async def test_stopped_search_stops_blinking(self, bench: Bench) -> None:
+        await self._hold(bench, s1=20, s2=15, n1=8, w1=50)
+        await bench.locate.start("Гайка M6")
+        await self._send(bench, {"s1": 20, "s2": 15, "n1": 8, "w1": 50})
+        assert bench.publisher.blinking() == [False, False, True, False]
+        bench.locate.stop()
+        await self._send(bench, {"s1": 20, "s2": 15, "n1": 8, "w1": 50})
+        assert bench.publisher.blinking() == [False, False, False, False]

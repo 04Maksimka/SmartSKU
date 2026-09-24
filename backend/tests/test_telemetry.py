@@ -6,7 +6,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from smartsku_backend.config import DatabaseConfig, TelemetryConfig
+from smartsku_backend.config import DatabaseConfig, LocateConfig, TelemetryConfig
 from smartsku_backend.db.database import Database
 from smartsku_backend.db.models import Box, Component, InventoryEvent, InventoryEventType, LockerState
 from smartsku_backend.messaging.contracts import (
@@ -18,6 +18,7 @@ from smartsku_backend.messaging.contracts import (
 )
 from smartsku_backend.services.assembly import AssemblyTracker
 from smartsku_backend.services.indicators import IndicatorPolicy
+from smartsku_backend.services.locate import ComponentLocator
 from smartsku_backend.services.runtime_cache import LockerRuntimeCache
 from smartsku_backend.services.telemetry import TelemetryService
 
@@ -68,7 +69,8 @@ class TestTelemetryAccounting:
             LockerRuntimeCache(),
             IndicatorPolicy(),
             FakePublisher(),
-            AssemblyTracker(session),
+            assemblies=AssemblyTracker(session),
+            locator=ComponentLocator(LocateConfig(), clock),
             config=TelemetryConfig(
                 weight_change_threshold=0.1,
                 confirm_seconds=self.CONFIRM_SECONDS,

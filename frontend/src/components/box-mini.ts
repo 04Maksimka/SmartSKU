@@ -183,8 +183,37 @@ export class BoxMini extends LitElement {
         opacity: 0.4;
       }
 
-      button.box.idle-in-assembly {
+      button.box.idle-in-assembly,
+      button.box.not-found {
         opacity: 0.55;
+      }
+
+      /* Search: the box and the slots holding the component pulse like their blinking displays */
+      button.box.found {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 2px var(--accent-soft);
+      }
+
+      .slot.found {
+        background: var(--accent-soft);
+        box-shadow: inset 0 0 0 2px var(--accent);
+      }
+
+      .slot.not-found {
+        opacity: 0.4;
+      }
+
+      @media (prefers-reduced-motion: no-preference) {
+        .slot.found {
+          animation: found 0.8s steps(1, end) infinite;
+        }
+      }
+
+      @keyframes found {
+        50% {
+          box-shadow: inset 0 0 0 2px transparent;
+          background: transparent;
+        }
       }
     `,
   ];
@@ -211,10 +240,15 @@ export class BoxMini extends LitElement {
     const title = box.alias ?? (box.address ? box.hardware_id : "не размещён");
     // During an assembly a box with nothing to take from fades out, so the way through the stand is plain
     const idle = lockers.some((item) => item.assembly) && !lockers.some((item) => item.assembly?.pick);
+    const search = lockers.some((item) => item.search === "match")
+      ? "found"
+      : lockers.some((item) => item.search === "other")
+        ? "not-found"
+        : "";
     return html`<button
       class="box ${this.selected ? "selected" : ""} ${this.moving ? "moving" : ""} ${this.arranging
         ? "arranging"
-        : ""} ${idle ? "idle-in-assembly" : ""}"
+        : ""} ${idle ? "idle-in-assembly" : ""} ${search}"
       aria-pressed=${this.selected ? "true" : "false"}
       @click=${() => this.events.selectBox(this, box.id)}
     >
@@ -234,7 +268,8 @@ export class BoxMini extends LitElement {
   private renderSlot(item: LockerOverview | null, lockerId: number) {
     const [tone, count, label] = item ? this.describe(item) : (["out", "·", "нет данных"] as const);
     const slot = this.format.slot(lockerId);
-    return html`<span class="slot ${tone}" title="Слот ${slot}: ${label}">
+    const search = item?.search === "match" ? "found" : item?.search === "other" ? "not-found" : "";
+    return html`<span class="slot ${tone} ${search}" title="Слот ${slot}: ${label}">
       <span class="count">${count}</span>
       ${label ? html`<span class="label">${label}</span>` : nothing}
     </span>`;

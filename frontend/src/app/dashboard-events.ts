@@ -30,6 +30,7 @@ export class DashboardEvents {
   static readonly PLACE_AT = "sku-place-at";
   static readonly RENAME_CLUSTER = "sku-rename-cluster";
   static readonly CANCEL_ASSEMBLY = "sku-cancel-assembly";
+  static readonly LOCATE = "sku-locate";
 
   calibrate(target: EventTarget, locker: LockerOverview | null): void {
     this.dispatch(target, DashboardEvents.CALIBRATE, locker);
@@ -74,6 +75,11 @@ export class DashboardEvents {
   /** Stops the running assembly: the displays go back to counting. */
   cancelAssembly(target: EventTarget, assembly: Assembly): void {
     this.dispatch(target, DashboardEvents.CANCEL_ASSEMBLY, assembly);
+  }
+
+  /** Finds a component on the stands: its cells light up and their displays blink. */
+  locate(target: EventTarget, componentName: string): void {
+    this.dispatch(target, DashboardEvents.LOCATE, componentName);
   }
 
   private dispatch(target: EventTarget, type: string, detail: unknown): void {

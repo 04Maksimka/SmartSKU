@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from smartsku_backend.config import (
     AppConfig,
     LayoutConfig,
+    LocateConfig,
     MqttConfig,
     OnboardingConfig,
     ScaleConfig,
@@ -23,6 +24,7 @@ from smartsku_backend.services.failure_notes import FailureNotes
 from smartsku_backend.services.indicators import IndicatorPolicy
 from smartsku_backend.services.inventory import ComponentService, InventoryQueryService
 from smartsku_backend.services.layout import LayoutService
+from smartsku_backend.services.locate import ComponentLocator, LocateService
 from smartsku_backend.services.provisioning import ProvisioningService
 from smartsku_backend.services.runtime_cache import LockerRuntimeCache
 from smartsku_backend.services.scale import ScaleResultWaiter, ScaleService
@@ -53,6 +55,10 @@ class ConfigProvider(Provider):
     def layout(self, config: AppConfig) -> LayoutConfig:
         return config.layout
 
+    @provide(scope=Scope.APP)
+    def locate(self, config: AppConfig) -> LocateConfig:
+        return config.locate
+
 
 class InfrastructureProvider(Provider):
     @provide(scope=Scope.APP)
@@ -77,6 +83,7 @@ class ServicesProvider(Provider):
     indicator_policy = provide(IndicatorPolicy, scope=Scope.APP)
     scale_waiter = provide(ScaleResultWaiter, scope=Scope.APP)
     failure_notes = provide(FailureNotes, scope=Scope.APP)
+    locator = provide(ComponentLocator, scope=Scope.APP)
 
     request_services = provide_all(
         TelemetryService,
@@ -92,6 +99,7 @@ class ServicesProvider(Provider):
         StockService,
         AssemblyTracker,
         AssemblyService,
+        LocateService,
         scope=Scope.REQUEST,
     )
 

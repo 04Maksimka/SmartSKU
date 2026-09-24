@@ -59,7 +59,8 @@ public:
   // Что показывает дисплей по команде бэкенда (screen_mode): количество, задание сборки или ничего
   enum class ScreenMode { Count, Off, Take, Put };
   static ScreenMode parseScreenMode(const String &name);
-  void applyIndicators(ScreenMode mode, bool hasNumber, int screenNumber);
+  // blink: ячейку ищут с фронта — дисплей мигает, показывая то же, что и без мигания
+  void applyIndicators(ScreenMode mode, bool hasNumber, int screenNumber, bool blink);
   // Нет связи с бэкендом — дисплей показывает количество, посчитанное самим боксом
   void setBackendOnline(bool online);
   // true один раз после итога настройки или калибровки; event — отчёт для топика events (box_id добавляет BoxApp)
@@ -156,6 +157,9 @@ private:
   // Бэкенд прислал команду indicators после последнего выхода на связь
   bool hasScreenCommand_ = false;
   ScreenMode screenMode_ = ScreenMode::Count;
+  bool screenBlink_ = false;
+  // Мигание: сейчас погашенная половина периода
+  bool blinkHidden_ = false;
   bool screenBlank_ = false;
   int screenNumber_ = 0;
 };

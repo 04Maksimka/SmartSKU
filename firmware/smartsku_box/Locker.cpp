@@ -37,6 +37,11 @@ void Locker::update() {
     resultShown_ = false;
     refreshDisplay();
   }
+  bool hidden = screenBlink_ && (millis() / AppConfig::DISPLAY_BLINK_MS) % 2 == 1;
+  if (hidden != blinkHidden_) {
+    blinkHidden_ = hidden;
+    refreshDisplay();
+  }
 }
 
 void Locker::pollNfc() {
@@ -434,8 +439,9 @@ Locker::ScreenMode Locker::parseScreenMode(const String &name) {
   return ScreenMode::Count;
 }
 
-void Locker::applyIndicators(ScreenMode mode, bool hasNumber, int screenNumber) {
+void Locker::applyIndicators(ScreenMode mode, bool hasNumber, int screenNumber, bool blink) {
   hasScreenCommand_ = true;
+  screenBlink_ = blink;
   screenMode_ = mode;
   screenBlank_ = !hasNumber;
   screenNumber_ = screenNumber;
@@ -484,7 +490,7 @@ void Locker::refreshDisplay() {
     return;
   }
   if (backendOnline_ && hasScreenCommand_) {
-    if (screenMode_ == ScreenMode::Off) {
+    if (screenMode_ == ScreenMode::Off || (screenBlink_ && blinkHidden_)) {
       display_.showBlank();
     } else if (screenMode_ == ScreenMode::Take || screenMode_ == ScreenMode::Put) {
       display_.showTask(screenMode_ == ScreenMode::Take ? CountDisplay::LETTER_TAKE : CountDisplay::LETTER_PUT,
