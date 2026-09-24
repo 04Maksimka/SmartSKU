@@ -47,6 +47,15 @@ export class ApiClient extends HttpClient {
     return this.get("/api/lockers");
   }
 
+  /** Answered by Caddy only for the view-only guest link; elsewhere there is no such route and access is full. */
+  async readOnly(): Promise<boolean> {
+    try {
+      return (await this.get<{ read_only?: boolean }>("/api/access")).read_only === true;
+    } catch {
+      return false;
+    }
+  }
+
   components(): Promise<Component[]> {
     return this.get("/api/components");
   }

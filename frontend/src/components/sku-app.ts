@@ -2,7 +2,7 @@ import { LitElement, css, html, nothing } from "lit";
 import { repeat } from "lit/directives/repeat.js";
 
 import type { Assembly, Calibration, Cluster, Component } from "../api/types";
-import type { CommandService } from "../app/command-service";
+import { CommandService } from "../app/command-service";
 import {
   DashboardEvents,
   type CancelCalibrationRequest,
@@ -20,6 +20,7 @@ import { Theme } from "./theme";
 type Tab = "boxes" | "components" | "assembly" | "journal";
 
 export class SkuApp extends LitElement {
+  private static readonly NOTICE_MS = 4000;
   /** Tabs of the dashboard; the chosen one lives in the URL hash, so a reload or a link keeps it. */
   private static readonly TABS: { id: Tab; label: string }[] = [
     { id: "boxes", label: "Склад" },
@@ -34,6 +35,7 @@ export class SkuApp extends LitElement {
     referenceGrams: { attribute: false },
     snapshot: { state: true },
     actionError: { state: true },
+    notice: { state: true },
     tab: { state: true },
     theme: { state: true },
     editingLayout: { state: true },
@@ -328,6 +330,14 @@ export class SkuApp extends LitElement {
         }
       }
 
+      .notice {
+        margin-bottom: 16px;
+        padding: 12px 14px;
+        border-radius: var(--r-sm, 9px);
+        background: var(--tone-info-bg);
+        color: var(--tone-info);
+      }
+
       .error {
         margin-bottom: 16px;
         padding: 12px 14px;
@@ -431,6 +441,9 @@ export class SkuApp extends LitElement {
   declare referenceGrams: number;
   declare snapshot: DashboardSnapshot;
   declare actionError: string | null;
+  /** Why a button did nothing: the view-only guest link. */
+  declare notice: string | null;
+  private noticeTimer = 0;
   declare tab: Tab;
   declare theme: ThemeChoice;
   /** The stands are being rearranged: box cards offer to move, rename or take a box off its stand. */
@@ -452,6 +465,7 @@ export class SkuApp extends LitElement {
   constructor() {
     super();
     this.actionError = null;
+    this.notice = null;
     this.editingLayout = false;
     this.placingBoxId = null;
     this.selectedBoxId = null;
@@ -541,6 +555,9 @@ export class SkuApp extends LitElement {
   };
 
   private readonly handleSetLowStock = (event: Event): void => {
+    if (this.blocked()) {
+      return;
+    }
     const component = (event as CustomEvent<Component>).detail;
     const answer = prompt(
       `«${component.name}»: предупреждать, когда останется меньше скольких штук? Пусто — не предупреждать.`,
@@ -566,6 +583,9 @@ export class SkuApp extends LitElement {
   };
 
   private cancelAssembly(assembly: Assembly): void {
+    if (this.blocked()) {
+      return;
+    }
     const title = this.format.assemblyTitle(assembly.name, assembly.kits);
     if (confirm(`Прервать сборку «${title}»? Дисплеи вернутся к обычному режиму, в журнал запишется, сколько взяли.`)) {
       void this.run(() => this.commands.cancelAssembly(assembly.id));
@@ -573,6 +593,9 @@ export class SkuApp extends LitElement {
   }
 
   private readonly handleCalibrate = (event: Event): void => {
+    if (this.blocked()) {
+      return;
+    }
     this.actionError = null;
     const locker = (event as CustomEvent<LockerOverview | null>).detail;
     void this.openDialog(locker);
@@ -588,11 +611,17 @@ export class SkuApp extends LitElement {
   };
 
   private openScaleSetup(locker: LockerOverview | null): void {
+    if (this.blocked()) {
+      return;
+    }
     this.actionError = null;
     this.renderRoot.querySelector<ScaleSetupDialog>("sku-scale-setup-dialog")?.open(locker);
   }
 
   private readonly handleCancelCalibration = (event: Event): void => {
+    if (this.blocked()) {
+      return;
+    }
     const request = (event as CustomEvent<CancelCalibrationRequest>).detail;
     if (confirm(`Отменить калибровку «${request.label}»?`)) {
       void this.run(() => this.commands.cancelCalibration(request.id));
@@ -600,6 +629,9 @@ export class SkuApp extends LitElement {
   };
 
   private readonly handleReleaseComponent = (event: Event): void => {
+    if (this.blocked()) {
+      return;
+    }
     const request = (event as CustomEvent<ReleaseComponentRequest>).detail;
     if (confirm(`Освободить ячейку: ${request.label}? Бэкенд забудет, что в ней лежит.`)) {
       void this.run(() => this.commands.releaseComponent(request.nfcId));
@@ -623,6 +655,9 @@ export class SkuApp extends LitElement {
 
   /** The first box starts a stand right away; otherwise the stands show where the box can go. */
   private readonly handlePlaceBox = (event: Event): void => {
+    if (this.blocked()) {
+      return;
+    }
     const boxId = (event as CustomEvent<string>).detail;
     this.actionError = null;
     this.selectedBoxId = boxId;
@@ -673,12 +708,32 @@ export class SkuApp extends LitElement {
   }
 
   private readonly handleRenameCluster = (event: Event): void => {
+    if (this.blocked()) {
+      return;
+    }
     const cluster = (event as CustomEvent<Cluster>).detail;
     const name = prompt("Название стенда", cluster.name)?.trim();
     if (name) {
       void this.run(() => this.commands.renameCluster(cluster.id, name));
     }
   };
+
+  private readonly editLayout = (): void => {
+    if (!this.blocked()) {
+      this.editingLayout = true;
+    }
+  };
+
+  /** The view-only guest link: the button stays, pressing it only says why nothing happens. */
+  private blocked(): boolean {
+    if (!this.commands.readOnly) {
+      return false;
+    }
+    this.notice = CommandService.READ_ONLY_MESSAGE;
+    window.clearTimeout(this.noticeTimer);
+    this.noticeTimer = window.setTimeout(() => (this.notice = null), SkuApp.NOTICE_MS);
+    return true;
+  }
 
   private async run(action: () => Promise<void>): Promise<void> {
     this.actionError = null;
@@ -690,11 +745,17 @@ export class SkuApp extends LitElement {
   }
 
   private async openDialog(locker: LockerOverview | null): Promise<void> {
+    if (this.blocked()) {
+      return;
+    }
     await this.updateComplete;
     this.renderRoot.querySelector<CalibrationDialog>("sku-calibration-dialog")?.open(locker);
   }
 
   private readonly openSetup = (): void => {
+    if (this.blocked()) {
+      return;
+    }
     this.actionError = null;
     this.renderRoot.querySelector<BoxSetupDialog>("sku-box-setup-dialog")?.open();
   };
@@ -765,6 +826,9 @@ export class SkuApp extends LitElement {
             ? html`<span class="pill good">● сервер на связи</span>`
             : html`<span class="pill">загрузка…</span>`}
         ${snapshot.updatedAt ? html`<span class="clock">${this.format.time(snapshot.updatedAt)}</span>` : nothing}
+        ${this.commands.readOnly
+          ? html`<span class="pill info" title="Гостевой доступ: можно смотреть и искать компоненты">просмотр</span>`
+          : nothing}
       </div>
     `;
   }
@@ -772,6 +836,7 @@ export class SkuApp extends LitElement {
   private renderDashboard() {
     const snapshot = this.snapshot;
     return html`
+      ${this.notice ? html`<div class="notice" role="status">${this.notice}</div>` : nothing}
       ${this.actionError ? html`<div class="error">${this.actionError}</div>` : nothing}
       ${snapshot.error
         ? html`<div class="error">Не удалось обновить данные: ${snapshot.error}. Показаны последние полученные.</div>`
@@ -962,7 +1027,7 @@ export class SkuApp extends LitElement {
             <span class="muted">
               Адрес бокса — столбец (A, B… слева направо) и ряд (1, 2… снизу вверх), как стоят боксы на стенде.
             </span>
-            <button @click=${() => (this.editingLayout = true)}>Изменить расстановку</button>
+            <button @click=${this.editLayout}>Изменить расстановку</button>
           </div>`
         : nothing;
     }

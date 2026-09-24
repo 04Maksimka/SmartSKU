@@ -13,7 +13,7 @@
 	handle @guest_link {
 		header Set-Cookie "skubox_guest={$SMARTSKU_GUEST_TOKEN:none}; Path=/; Max-Age=172800; Secure; HttpOnly; SameSite=Lax"
 		# Drops the token from the address bar
-		redir / 302
+		redir * / 302
 	}
 
 	@guest {
@@ -22,6 +22,41 @@
 	}
 	handle @guest {
 		reverse_proxy frontend:80
+	}
+
+	# View-only link, the same way: https://<domain>/?view=<SMARTSKU_VIEWER_TOKEN>, until SMARTSKU_VIEWER_UNTIL. Everything
+	# can be looked at and a component can be searched for; any other change is rejected here, before the backend. The
+	# dashboard asks /api/access (answered only here) and makes its buttons explain that instead of acting.
+	@viewer_link {
+		query view={$SMARTSKU_VIEWER_TOKEN:none}
+		expression `size("{$SMARTSKU_VIEWER_TOKEN:none}") >= 16 && int({time.now.unix}) < {$SMARTSKU_VIEWER_UNTIL:0}`
+	}
+	handle @viewer_link {
+		header Set-Cookie "skubox_viewer={$SMARTSKU_VIEWER_TOKEN:none}; Path=/; Max-Age=172800; Secure; HttpOnly; SameSite=Lax"
+		redir * / 302
+	}
+
+	@viewer {
+		header Cookie *skubox_viewer={$SMARTSKU_VIEWER_TOKEN:none}*
+		expression `size("{$SMARTSKU_VIEWER_TOKEN:none}") >= 16 && int({time.now.unix}) < {$SMARTSKU_VIEWER_UNTIL:0}`
+	}
+	handle @viewer {
+		@access path /api/access
+		handle @access {
+			header Content-Type application/json
+			respond `\{"read_only": true\}` 200
+		}
+		@write {
+			not method GET HEAD
+			not path /api/locate
+		}
+		handle @write {
+			header Content-Type application/json
+			respond `\{"detail": "Режим только просмотра: это действие недоступно"\}` 403
+		}
+		handle {
+			reverse_proxy frontend:80
+		}
 	}
 
 	handle {

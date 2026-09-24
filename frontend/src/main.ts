@@ -13,7 +13,7 @@ class Application {
     const store = new DashboardStore(api, config);
     const app = new SkuApp();
     app.store = store;
-    app.commands = new CommandService(api, store);
+    app.commands = new CommandService(api, store, await api.readOnly());
     app.referenceGrams = config.referenceGrams;
     document.body.replaceChildren(app);
     store.start();
