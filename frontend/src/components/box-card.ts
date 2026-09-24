@@ -9,7 +9,6 @@ import { Theme } from "./theme";
 export class BoxCard extends LitElement {
   static override properties = {
     overview: { attribute: false },
-    editing: { type: Boolean },
     moving: { type: Boolean },
   };
 
@@ -120,8 +119,6 @@ export class BoxCard extends LitElement {
   ];
 
   declare overview: BoxOverview;
-  /** The stand is being rearranged: the card offers to move, rename or take the box off the stand. */
-  declare editing: boolean;
   /** This box is the one being placed right now. */
   declare moving: boolean;
 
@@ -130,7 +127,6 @@ export class BoxCard extends LitElement {
 
   constructor() {
     super();
-    this.editing = false;
     this.moving = false;
   }
 
@@ -189,20 +185,16 @@ export class BoxCard extends LitElement {
     `;
   }
 
+  /** A box without a place offers to put it on a stand; placed boxes are rearranged on the stand map. */
   private renderLayoutActions() {
-    const item = this.overview;
-    const placed = item.box.address !== null;
-    if (placed && !this.editing) {
+    const box = this.overview.box;
+    if (box.address !== null) {
       return "";
     }
     return html`<div class="layout-actions">
-      <button class=${placed ? "" : "primary"} ?disabled=${this.moving} @click=${() => this.events.placeBox(this, item.box.id)}>
-        ${placed ? "Переместить" : "Указать место на стенде"}
+      <button class="primary" ?disabled=${this.moving} @click=${() => this.events.placeBox(this, box.id)}>
+        Указать место на стенде
       </button>
-      <button @click=${() => this.events.renameBox(this, item)}>${item.box.alias ? "Изменить название" : "Дать название"}</button>
-      ${placed
-        ? html`<button class="danger" @click=${() => this.events.unplaceBox(this, item)}>Убрать со стенда</button>`
-        : ""}
     </div>`;
   }
 

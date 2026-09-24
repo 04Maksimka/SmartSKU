@@ -314,6 +314,7 @@ export class SkuApp extends LitElement {
 
 
       .layout-bar {
+        min-height: 36px;
         display: flex;
         align-items: center;
         justify-content: space-between;
@@ -438,14 +439,14 @@ export class SkuApp extends LitElement {
     this.addEventListener(DashboardEvents.SELECT_BOX, this.handleSelectBox);
     this.addEventListener(DashboardEvents.PLACE_BOX, this.handlePlaceBox);
     this.addEventListener(DashboardEvents.PLACE_AT, this.handlePlaceAt);
-    this.addEventListener(DashboardEvents.UNPLACE_BOX, this.handleUnplaceBox);
-    this.addEventListener(DashboardEvents.RENAME_BOX, this.handleRenameBox);
     this.addEventListener(DashboardEvents.RENAME_CLUSTER, this.handleRenameCluster);
     window.addEventListener("hashchange", this.handleHashChange);
+    window.addEventListener("keydown", this.handleKeydown);
   }
 
   override disconnectedCallback(): void {
     window.removeEventListener("hashchange", this.handleHashChange);
+    window.removeEventListener("keydown", this.handleKeydown);
     super.disconnectedCallback();
     this.unsubscribe?.();
     this.removeEventListener(DashboardEvents.CALIBRATE, this.handleCalibrate);
@@ -456,8 +457,6 @@ export class SkuApp extends LitElement {
     this.removeEventListener(DashboardEvents.SELECT_BOX, this.handleSelectBox);
     this.removeEventListener(DashboardEvents.PLACE_BOX, this.handlePlaceBox);
     this.removeEventListener(DashboardEvents.PLACE_AT, this.handlePlaceAt);
-    this.removeEventListener(DashboardEvents.UNPLACE_BOX, this.handleUnplaceBox);
-    this.removeEventListener(DashboardEvents.RENAME_BOX, this.handleRenameBox);
     this.removeEventListener(DashboardEvents.RENAME_CLUSTER, this.handleRenameCluster);
   }
 
@@ -495,8 +494,15 @@ export class SkuApp extends LitElement {
     }
   };
 
+  /** While rearranging, tapping a box on the map picks it up (tapping it again puts it back); otherwise it opens its card. */
   private readonly handleSelectBox = (event: Event): void => {
-    this.selectedBoxId = (event as CustomEvent<string>).detail;
+    const boxId = (event as CustomEvent<string>).detail;
+    this.selectedBoxId = boxId;
+    if (this.editingLayout || this.placingBoxId !== null) {
+      this.actionError = null;
+      this.placingBoxId = this.placingBoxId === boxId ? null : boxId;
+      return;
+    }
     // On a phone the card opens below the map, out of sight
     void this.updateComplete.then(() =>
       this.renderRoot.querySelector(".box-detail")?.scrollIntoView({ block: "nearest", behavior: "smooth" }),
@@ -529,23 +535,30 @@ export class SkuApp extends LitElement {
     }
   };
 
-  private readonly handleUnplaceBox = (event: Event): void => {
-    const item = (event as CustomEvent<BoxOverview>).detail;
+  private readonly handleKeydown = (event: KeyboardEvent): void => {
+    if (event.key === "Escape" && this.placingBoxId !== null) {
+      this.placingBoxId = null;
+    }
+  };
+
+  private unplaceBox(item: BoxOverview): void {
     const question =
       `Убрать бокс ${item.name} со стенда? Учёт по нему продолжится, а на дашборде он будет в «Не размещены».` +
       " Адреса остальных боксов стенда могут сдвинуться.";
     if (confirm(question)) {
-      void this.run(() => this.commands.unplaceBox(item.box.id));
+      void this.run(async () => {
+        await this.commands.unplaceBox(item.box.id);
+        this.placingBoxId = null;
+      });
     }
-  };
+  }
 
-  private readonly handleRenameBox = (event: Event): void => {
-    const item = (event as CustomEvent<BoxOverview>).detail;
+  private renameBox(item: BoxOverview): void {
     const alias = prompt(`Название бокса ${item.name}, например, что в нём лежит. Пусто — без названия.`, item.box.alias ?? "");
     if (alias !== null) {
       void this.run(() => this.commands.renameBox(item.box.id, alias.trim() || null));
     }
-  };
+  }
 
   private readonly handleRenameCluster = (event: Event): void => {
     const cluster = (event as CustomEvent<Cluster>).detail;
@@ -708,20 +721,7 @@ export class SkuApp extends LitElement {
     const placing = snapshot.boxes.find((item) => item.box.id === this.placingBoxId) ?? null;
     const selected = this.selectedBox();
     return html`
-      ${placing ? this.renderPlacing(placing) : nothing}
-      ${snapshot.clusters.length
-        ? html`<div class="layout-bar">
-            <span class="muted">
-              Адрес бокса — столбец (A, B… слева направо) и ряд (1, 2… снизу вверх), как стоят боксы на стенде.
-            </span>
-            <button
-              class=${this.editingLayout ? "primary" : ""}
-              @click=${() => (this.editingLayout = !this.editingLayout)}
-            >
-              ${this.editingLayout ? "Готово" : "Изменить расстановку"}
-            </button>
-          </div>`
-        : nothing}
+      ${this.renderLayoutBar(placing)}
       <div class="stands-layout">
         <div class="stands">
           ${repeat(
@@ -749,6 +749,7 @@ export class SkuApp extends LitElement {
                       .overview=${item}
                       ?selected=${item.box.id === selected?.box.id}
                       ?moving=${item.box.id === this.placingBoxId}
+                      ?arranging=${this.editingLayout || placing !== null}
                     ></sku-box-mini>`,
                   )}
                 </div>
@@ -757,11 +758,7 @@ export class SkuApp extends LitElement {
         </div>
         ${selected
           ? html`<div class="box-detail">
-              <sku-box-card
-                .overview=${selected}
-                ?editing=${this.editingLayout}
-                ?moving=${selected.box.id === this.placingBoxId}
-              ></sku-box-card>
+              <sku-box-card .overview=${selected} ?moving=${selected.box.id === this.placingBoxId}></sku-box-card>
             </div>`
           : nothing}
       </div>
@@ -775,23 +772,56 @@ export class SkuApp extends LitElement {
     return ordered.find((item) => item.box.id === this.selectedBoxId) ?? ordered[0] ?? null;
   }
 
-  private renderPlacing(placing: BoxOverview) {
+  /** Above the map: how addresses read and the switch into rearranging; while rearranging, what to tap next and
+   * what else can be done with the picked box. */
+  private renderLayoutBar(placing: BoxOverview | null) {
+    if (!this.editingLayout && placing === null) {
+      return this.snapshot.clusters.length
+        ? html`<div class="layout-bar">
+            <span class="muted">
+              Адрес бокса — столбец (A, B… слева направо) и ряд (1, 2… снизу вверх), как стоят боксы на стенде.
+            </span>
+            <button @click=${() => (this.editingLayout = true)}>Изменить расстановку</button>
+          </div>`
+        : nothing;
+    }
     const alone =
+      placing !== null &&
       placing.box.cluster_id !== null &&
       !this.snapshot.boxes.some((item) => item.box.cluster_id === placing.box.cluster_id && item !== placing);
     return html`<div class="card placing">
       <div>
-        <b>Где стоит бокс ${placing.name}?</b>
-        <span class="muted">Нажмите «+ Сюда» рядом с боксом, к которому он пристыкован.</span>
+        ${placing
+          ? html`<b>Бокс ${placing.name}.</b>
+              <span class="muted">
+                Нажмите подсвеченное место «+ Сюда» рядом с боксом, к которому он пристыкован. Отмена — снова на бокс
+                или Esc.
+              </span>`
+          : html`<b>Расстановка.</b>
+              <span class="muted">Нажмите на бокс на схеме, чтобы переставить его, дать название или убрать со стенда.</span>`}
       </div>
       <div class="buttons">
-        ${alone
-          ? nothing
-          : html`<button @click=${() => this.handlePlaceAtNewStand(placing)}>На новый стенд</button>`}
-        <button @click=${() => (this.placingBoxId = null)}>Отмена</button>
+        ${placing
+          ? html`
+              <button @click=${() => this.renameBox(placing)}>${placing.box.alias ? "Изменить название" : "Дать название"}</button>
+              ${placing.box.cluster_id !== null
+                ? html`<button class="danger" @click=${() => this.unplaceBox(placing)}>Убрать со стенда</button>`
+                : nothing}
+              ${alone ? nothing : html`<button @click=${() => this.handlePlaceAtNewStand(placing)}>На новый стенд</button>`}
+              <button @click=${() => (this.placingBoxId = null)}>Отмена</button>
+            `
+          : nothing}
+        ${this.editingLayout
+          ? html`<button class="primary" @click=${this.finishLayout}>Готово</button>`
+          : nothing}
       </div>
     </div>`;
   }
+
+  private readonly finishLayout = (): void => {
+    this.editingLayout = false;
+    this.placingBoxId = null;
+  };
 
   private handlePlaceAtNewStand(placing: BoxOverview): void {
     void this.run(async () => {

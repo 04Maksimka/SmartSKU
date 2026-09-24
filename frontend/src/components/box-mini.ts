@@ -16,6 +16,7 @@ export class BoxMini extends LitElement {
     overview: { attribute: false },
     selected: { type: Boolean },
     moving: { type: Boolean },
+    arranging: { type: Boolean },
   };
 
   static override styles = [
@@ -49,9 +50,16 @@ export class BoxMini extends LitElement {
         box-shadow: 0 0 0 2px var(--accent-soft);
       }
 
+      button.box.arranging {
+        cursor: grab;
+      }
+
       button.box.moving {
-        border-style: dashed;
-        border-color: var(--accent);
+        cursor: grabbing;
+        border: 2px solid var(--accent);
+        background: var(--accent-soft);
+        box-shadow: 0 6px 18px rgba(20, 23, 28, 0.18);
+        transform: translateY(-2px);
       }
 
       .head {
@@ -152,6 +160,8 @@ export class BoxMini extends LitElement {
   declare overview: BoxOverview;
   declare selected: boolean;
   declare moving: boolean;
+  /** The stand is being rearranged: tapping the box picks it up. */
+  declare arranging: boolean;
 
   private readonly format = new Formatter();
   private readonly events = new DashboardEvents();
@@ -160,13 +170,14 @@ export class BoxMini extends LitElement {
     super();
     this.selected = false;
     this.moving = false;
+    this.arranging = false;
   }
 
   protected override render() {
     const { box, lockers, columns } = this.overview;
     const title = box.alias ?? (box.address ? box.hardware_id : "не размещён");
     return html`<button
-      class="box ${this.selected ? "selected" : ""} ${this.moving ? "moving" : ""}"
+      class="box ${this.selected ? "selected" : ""} ${this.moving ? "moving" : ""} ${this.arranging ? "arranging" : ""}"
       aria-pressed=${this.selected ? "true" : "false"}
       @click=${() => this.events.selectBox(this, box.id)}
     >

@@ -69,7 +69,21 @@ export class StandView extends LitElement {
         font-size: 12.5px;
       }
 
+      @media (prefers-reduced-motion: no-preference) {
+        .candidate {
+          animation: pulse 1.6s ease-in-out infinite;
+        }
+      }
+
+      @keyframes pulse {
+        50% {
+          border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+        }
+      }
+
       .candidate:hover:not(:disabled) {
+        animation: none;
+        border-style: solid;
         color: var(--text);
         filter: brightness(1.04);
       }
@@ -118,6 +132,7 @@ export class StandView extends LitElement {
               .overview=${item}
               ?selected=${this.selectedBoxId === item.box.id}
               ?moving=${this.placing?.box.id === item.box.id}
+              ?arranging=${this.editing || this.placing !== null}
               style=${place(item.box.grid_x ?? 0, item.box.grid_y ?? 0)}
             ></sku-box-mini>`,
           )}

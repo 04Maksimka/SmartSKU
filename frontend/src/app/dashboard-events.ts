@@ -1,5 +1,5 @@
 import type { Calibration, Cluster } from "../api/types";
-import type { BoxOverview, LockerOverview } from "./dashboard-store";
+import type { LockerOverview } from "./dashboard-store";
 
 export interface CancelCalibrationRequest {
   id: number;
@@ -28,8 +28,6 @@ export class DashboardEvents {
   static readonly SELECT_BOX = "sku-select-box";
   static readonly PLACE_BOX = "sku-place-box";
   static readonly PLACE_AT = "sku-place-at";
-  static readonly UNPLACE_BOX = "sku-unplace-box";
-  static readonly RENAME_BOX = "sku-rename-box";
   static readonly RENAME_CLUSTER = "sku-rename-cluster";
 
   calibrate(target: EventTarget, locker: LockerOverview | null): void {
@@ -66,14 +64,6 @@ export class DashboardEvents {
 
   placeAt(target: EventTarget, request: PlaceAtRequest): void {
     this.dispatch(target, DashboardEvents.PLACE_AT, request);
-  }
-
-  unplaceBox(target: EventTarget, box: BoxOverview): void {
-    this.dispatch(target, DashboardEvents.UNPLACE_BOX, box);
-  }
-
-  renameBox(target: EventTarget, box: BoxOverview): void {
-    this.dispatch(target, DashboardEvents.RENAME_BOX, box);
   }
 
   renameCluster(target: EventTarget, cluster: Cluster): void {
