@@ -3,6 +3,14 @@
 {$SMARTSKU_DOMAIN} {
 	encode gzip
 
+	# /?exit forgets both guest cookies on this browser: back to the password
+	@exit query exit=*
+	handle @exit {
+		header +Set-Cookie "skubox_viewer=; Path=/; Max-Age=0; Secure; HttpOnly; SameSite=Lax"
+		header +Set-Cookie "skubox_guest=; Path=/; Max-Age=0; Secure; HttpOnly; SameSite=Lax"
+		redir * / 302
+	}
+
 	# Guest link for a demo (jury, customers): https://<domain>/?guest=<SMARTSKU_GUEST_TOKEN> sets a cookie and opens
 	# the dashboard without the password, with full rights, until SMARTSKU_GUEST_UNTIL (unix time). After that both
 	# the link and the cookie stop working by themselves. No token (shorter than 16 characters) — no guest access.
@@ -36,7 +44,9 @@
 		redir * / 302
 	}
 
+	# A browser that sends the dashboard password is never limited by a view-only cookie left from the link
 	@viewer {
+		not header Authorization *
 		header Cookie *skubox_viewer={$SMARTSKU_VIEWER_TOKEN:none}*
 		expression `size("{$SMARTSKU_VIEWER_TOKEN:none}") >= 16 && int({time.now.unix}) < {$SMARTSKU_VIEWER_UNTIL:0}`
 	}

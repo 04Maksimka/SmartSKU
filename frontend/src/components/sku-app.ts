@@ -827,7 +827,9 @@ export class SkuApp extends LitElement {
             : html`<span class="pill">загрузка…</span>`}
         ${snapshot.updatedAt ? html`<span class="clock">${this.format.time(snapshot.updatedAt)}</span>` : nothing}
         ${this.commands.readOnly
-          ? html`<span class="pill info" title="Гостевой доступ: можно смотреть и искать компоненты">просмотр</span>`
+          ? html`<a class="pill info" href="/?exit" title="Гостевой доступ: можно смотреть и искать компоненты. Нажмите, чтобы войти по паролю"
+              >просмотр · выйти</a
+            >`
           : nothing}
       </div>
     `;
