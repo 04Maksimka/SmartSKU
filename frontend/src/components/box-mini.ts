@@ -6,7 +6,7 @@ import { AssemblyScreen } from "../app/assembly-screen";
 import { Formatter } from "../app/formatter";
 import { Theme } from "./theme";
 
-type SlotTone = "counted" | "idle" | "out" | "busy" | "warn" | "take" | "put" | "done" | "dark";
+type SlotTone = "counted" | "counted low" | "idle" | "out" | "busy" | "warn" | "take" | "put" | "done" | "dark";
 
 /**
  * A box on the stand map: its address and the four slots with their counts, small enough to see a whole stand at
@@ -183,6 +183,16 @@ export class BoxMini extends LitElement {
         opacity: 0.4;
       }
 
+      /* Running low: only the count changes colour, the slot stays as it is */
+      .slot.low .count {
+        color: var(--tone-warn);
+      }
+
+      .slot.low .count::after {
+        content: " ▾";
+        font-size: 11px;
+      }
+
       button.box.idle-in-assembly,
       button.box.not-found {
         opacity: 0.55;
@@ -269,7 +279,8 @@ export class BoxMini extends LitElement {
     const [tone, count, label] = item ? this.describe(item) : (["out", "·", "нет данных"] as const);
     const slot = this.format.slot(lockerId);
     const search = item?.search === "match" ? "found" : item?.search === "other" ? "not-found" : "";
-    return html`<span class="slot ${tone} ${search}" title="Слот ${slot}: ${label}">
+    const low = item?.locker.component?.running_low && tone === "counted low" ? " · заканчивается" : "";
+    return html`<span class="slot ${tone} ${search}" title="Слот ${slot}: ${label}${low}">
       <span class="count">${count}</span>
       ${label ? html`<span class="label">${label}</span>` : nothing}
     </span>`;
@@ -296,6 +307,9 @@ export class BoxMini extends LitElement {
     }
     if (locker.component === null) {
       return ["idle", "—", "свободна"];
+    }
+    if (locker.component.running_low) {
+      return ["counted low", String(locker.quantity ?? "—"), locker.component.name];
     }
     return ["counted", String(locker.quantity ?? "—"), locker.component.name];
   }

@@ -73,6 +73,10 @@ export class ApiClient extends HttpClient {
     return this.send(`/api/boxes/${encodeURIComponent(boxId)}/lockers/${lockerId}/scale`, "POST", { action, grams });
   }
 
+  setLowStock(nfcId: string, lowStock: number | null): Promise<Component> {
+    return this.send(`/api/components/${encodeURIComponent(nfcId)}/low-stock`, "PUT", { low_stock: lowStock });
+  }
+
   startCalibration(request: CalibrationRequest): Promise<Calibration> {
     return this.send("/api/calibrations", "POST", request);
   }

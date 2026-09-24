@@ -86,10 +86,16 @@ class Component(Base):
     tags: Mapped[list[str]] = mapped_column(JSON, default=list)
     piece_weight: Mapped[float] = mapped_column(Float)
     quantity: Mapped[int] = mapped_column(Integer, default=0)
+    # Warn on the dashboard once fewer pieces are left; the box itself does not show it
+    low_stock: Mapped[int | None] = mapped_column(Integer)
     calibrated_at: Mapped[datetime] = mapped_column(UtcDateTime)
 
     def quantity_for(self, weight: float) -> int:
         return max(0, round(weight / self.piece_weight))
+
+    @property
+    def running_low(self) -> bool:
+        return self.low_stock is not None and self.quantity < self.low_stock
 
 
 class LockerState(Base):
@@ -131,6 +137,7 @@ class Calibration(Base):
     name: Mapped[str] = mapped_column(String(255))
     tags: Mapped[list[str]] = mapped_column(JSON, default=list)
     num_of_pieces: Mapped[int] = mapped_column(Integer)
+    low_stock: Mapped[int | None] = mapped_column(Integer)
     status: Mapped[CalibrationStatus] = mapped_column(
         Enum(CalibrationStatus, native_enum=False, length=16), default=CalibrationStatus.PENDING
     )

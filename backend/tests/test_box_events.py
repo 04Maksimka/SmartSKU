@@ -44,8 +44,10 @@ class TestBoxEvents:
     def _service(self, session: AsyncSession) -> BoxEventService:
         return BoxEventService(session, LockerRuntimeCache(), ScaleResultWaiter(), FailureNotes())
 
-    async def _calibration(self, session: AsyncSession) -> Calibration:
-        calibration = Calibration(box_id="box", locker_id=0, name="Болт", tags=["м3"], num_of_pieces=20)
+    async def _calibration(self, session: AsyncSession, low_stock: int | None = None) -> Calibration:
+        calibration = Calibration(
+            box_id="box", locker_id=0, name="Болт", tags=["м3"], num_of_pieces=20, low_stock=low_stock
+        )
         session.add(calibration)
         await session.commit()
         return calibration
@@ -103,6 +105,19 @@ class TestBoxEvents:
         assert state.quantity == 20
         [event] = await self._logged(session)
         assert (event.event_type, event.quantity_after) == (InventoryEventType.CALIBRATED, 20)
+
+    async def test_low_stock_level_goes_to_the_component(self, session: AsyncSession) -> None:
+        await self._calibration(session, low_stock=25)
+        payload = (
+            '{"event":"calibration_done","box_id":"box","locker_id":0,"nfc_id":"cell","piece_weight":2.5,"weight":50}'
+        )
+        await self._service(session).handle(self.ADAPTER.validate_json(payload))
+
+        component = await session.get(Component, "cell")
+        assert component is not None
+        assert (component.low_stock, component.running_low) == (25, True)
+        component.quantity = 25
+        assert not component.running_low
 
     async def test_calibration_failure_cancels_the_request(self, session: AsyncSession) -> None:
         calibration = await self._calibration(session)

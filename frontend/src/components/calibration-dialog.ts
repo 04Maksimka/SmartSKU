@@ -24,6 +24,7 @@ export class CalibrationDialog extends LitElement {
     name: { state: true },
     tags: { state: true },
     pieces: { state: true },
+    lowStock: { state: true },
     startedId: { state: true },
     error: { state: true },
     busy: { state: true },
@@ -142,6 +143,7 @@ export class CalibrationDialog extends LitElement {
   declare name: string;
   declare tags: string;
   declare pieces: string;
+  declare lowStock: string;
   declare startedId: number | null;
   declare error: string | null;
   declare busy: boolean;
@@ -159,6 +161,7 @@ export class CalibrationDialog extends LitElement {
     this.name = "";
     this.tags = "";
     this.pieces = "";
+    this.lowStock = "";
     this.startedId = null;
     this.error = null;
     this.busy = false;
@@ -171,6 +174,7 @@ export class CalibrationDialog extends LitElement {
     this.name = "";
     this.tags = "";
     this.pieces = "";
+    this.lowStock = "";
     this.startedId = null;
     this.error = null;
     this.busy = false;
@@ -277,6 +281,18 @@ export class CalibrationDialog extends LitElement {
         />
       </label>
       <div class="note">По этому количеству бокс посчитает вес одной штуки и дальше будет считать остаток сам.</div>
+      <label>
+        Предупредить, когда останется меньше, шт — необязательно
+        <input
+          type="number"
+          min="1"
+          step="1"
+          placeholder="Без предупреждения"
+          .value=${this.lowStock}
+          @input=${(event: Event) => (this.lowStock = (event.target as HTMLInputElement).value)}
+          @keydown=${this.submitOnEnter}
+        />
+      </label>
       ${this.error ? html`<div class="error">${this.error}</div>` : nothing}
       <div class="actions">
         <button @click=${() => (this.selected && this.step === "form" ? this.back() : this.close())}>Назад</button>
@@ -403,6 +419,11 @@ export class CalibrationDialog extends LitElement {
       this.error = "Количество штук должно быть больше нуля";
       return;
     }
+    const lowStock = this.lowStock.trim() ? Number(this.lowStock) : null;
+    if (lowStock !== null && (!Number.isInteger(lowStock) || lowStock < 1)) {
+      this.error = "Порог предупреждения — целое число от 1, или оставьте поле пустым";
+      return;
+    }
 
     this.busy = true;
     this.error = null;
@@ -416,6 +437,7 @@ export class CalibrationDialog extends LitElement {
           .map((tag) => tag.trim())
           .filter((tag) => tag.length > 0),
         num_of_pieces: pieces,
+        low_stock: lowStock,
       });
       this.lastStep = null;
       this.startedId = calibration.id;

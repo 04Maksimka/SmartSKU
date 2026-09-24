@@ -101,6 +101,7 @@ class BoxEventService:
                 self._session.add(component)
             component.name = calibration.name
             component.tags = list(calibration.tags)
+            component.low_stock = calibration.low_stock
             calibration.status = CalibrationStatus.COMPLETED
             calibration.nfc_id = event.nfc_id
             calibration.piece_weight = event.piece_weight

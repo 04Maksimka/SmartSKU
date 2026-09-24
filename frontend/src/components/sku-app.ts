@@ -1,7 +1,7 @@
 import { LitElement, css, html, nothing } from "lit";
 import { repeat } from "lit/directives/repeat.js";
 
-import type { Assembly, Calibration, Cluster } from "../api/types";
+import type { Assembly, Calibration, Cluster, Component } from "../api/types";
 import type { CommandService } from "../app/command-service";
 import {
   DashboardEvents,
@@ -300,6 +300,10 @@ export class SkuApp extends LitElement {
         font-weight: 500;
       }
 
+      .metric .value small.low {
+        color: var(--tone-warn);
+      }
+
       .metric.bad .value {
         color: var(--tone-bad);
       }
@@ -497,6 +501,7 @@ export class SkuApp extends LitElement {
     this.addEventListener(DashboardEvents.RENAME_CLUSTER, this.handleRenameCluster);
     this.addEventListener(DashboardEvents.CANCEL_ASSEMBLY, this.handleCancelAssembly);
     this.addEventListener(DashboardEvents.LOCATE, this.handleLocate);
+    this.addEventListener(DashboardEvents.SET_LOW_STOCK, this.handleSetLowStock);
     window.addEventListener("hashchange", this.handleHashChange);
     window.addEventListener("keydown", this.handleKeydown);
   }
@@ -517,6 +522,7 @@ export class SkuApp extends LitElement {
     this.removeEventListener(DashboardEvents.RENAME_CLUSTER, this.handleRenameCluster);
     this.removeEventListener(DashboardEvents.CANCEL_ASSEMBLY, this.handleCancelAssembly);
     this.removeEventListener(DashboardEvents.LOCATE, this.handleLocate);
+    this.removeEventListener(DashboardEvents.SET_LOW_STOCK, this.handleSetLowStock);
   }
 
   /** Lights up the component's cells and opens the stand map on the first box holding it. */
@@ -532,6 +538,23 @@ export class SkuApp extends LitElement {
         location.hash = "boxes";
       }
     });
+  };
+
+  private readonly handleSetLowStock = (event: Event): void => {
+    const component = (event as CustomEvent<Component>).detail;
+    const answer = prompt(
+      `«${component.name}»: предупреждать, когда останется меньше скольких штук? Пусто — не предупреждать.`,
+      component.low_stock === null ? "" : String(component.low_stock),
+    );
+    if (answer === null) {
+      return;
+    }
+    const lowStock = answer.trim() ? Number(answer) : null;
+    if (lowStock !== null && (!Number.isInteger(lowStock) || lowStock < 1)) {
+      this.actionError = "Порог — целое число от 1, или пусто, чтобы не предупреждать";
+      return;
+    }
+    void this.run(() => this.commands.setLowStock(component.nfc_id, lowStock));
   };
 
   private boxName(boxId: string): string {
@@ -995,6 +1018,7 @@ export class SkuApp extends LitElement {
     const lockers = this.lockers();
     const online = boxes.filter(({ box }) => box.online).length;
     const inserted = lockers.filter(({ locker }) => locker.nfc_flag).length;
+    const low = this.snapshot.components.filter(({ component }) => component.running_low).length;
     return html`
       <div class="summary">
         <div class="card metric ${online < boxes.length ? "bad" : ""}">
@@ -1007,7 +1031,11 @@ export class SkuApp extends LitElement {
         </div>
         <div class="card metric">
           <span class="label">Компоненты</span>
-          <span class="value">${this.snapshot.components.length}</span>
+          <span class="value"
+            >${this.snapshot.components.length}${low
+              ? html`<small class="low" title="Меньше порога, заданного при калибровке"> · ${low} мало</small>`
+              : nothing}</span
+          >
         </div>
       </div>
     `;

@@ -32,6 +32,30 @@ export class ComponentTable extends LitElement {
         font-size: 15px;
       }
 
+      .low {
+        display: block;
+        margin-top: 2px;
+        font-size: 12px;
+        color: var(--muted);
+        white-space: nowrap;
+      }
+
+      .low.running {
+        color: var(--tone-warn);
+        font-weight: 600;
+      }
+
+      button.threshold {
+        padding: 0;
+        border: 0;
+        background: none;
+        font: inherit;
+        color: inherit;
+        text-decoration: underline dotted;
+        text-underline-offset: 3px;
+        cursor: pointer;
+      }
+
       tr.located td {
         background: var(--accent-soft);
       }
@@ -141,7 +165,18 @@ export class ComponentTable extends LitElement {
             ? html`<div class="tags">${component.tags.map((tag) => html`<span class="tag">${tag}</span>`)}</div>`
             : ""}
         </td>
-        <td class="qty num end"><strong>${this.format.pieces(component.quantity)}</strong></td>
+        <td class="qty num end">
+          <strong>${this.format.pieces(component.quantity)}</strong>
+          <span class="low ${component.running_low ? "running" : ""}">
+            ${component.running_low ? "заканчивается · " : ""}<button
+              class="threshold"
+              title="Предупреждать на дашборде, когда останется меньше; бокс это не показывает"
+              @click=${() => this.events.setLowStock(this, component)}
+            >
+              ${component.low_stock === null ? "задать порог" : `порог < ${component.low_stock}`}
+            </button>
+          </span>
+        </td>
         <td class="piece num end" data-label="1 шт">${this.format.pieceWeight(component.piece_weight)}</td>
         <td class="where nowrap">
           ${location
