@@ -50,6 +50,8 @@ class TelemetryService:
         self._left_slots: list[tuple[str, int]] = []
         # The running assembly: journal records of its cells carry its id
         self._assembly: ActiveAssembly | None = None
+        # A cell of the component being looked for was pulled out: the search is over
+        self._found = False
         self._config = config
         self._clock = clock
 
@@ -87,9 +89,12 @@ class TelemetryService:
         for command in commands:
             if self._cache.indicators_changed(command) and await self._publisher.send_indicators(command):
                 self._cache.remember_indicators(command)
-        if finished:
-            # Every box puts its displays back to counting with the next telemetry
+        if finished or self._found:
+            # Every box puts its displays back to counting (or stops blinking) with the next telemetry
             self._cache.forget_all()
+        if self._found:
+            self._locator.stop()
+            self._found = False
         for left_box_id, left_locker_id in self._left_slots:
             self._cache.forget_slot(left_box_id, left_locker_id)
         self._left_slots.clear()
@@ -104,6 +109,8 @@ class TelemetryService:
         self._store_status(state, reading)
         # Cell presence comes from NFC and does not depend on the slot setup, the tare or the calibration.
         nfc_id = reading.nfc_id if reading.nfc_flag else None
+        if state.nfc_id is not None and state.nfc_id != nfc_id:
+            await self._check_found(state.nfc_id)
         component = await self._find_component(nfc_id)
         measurable = reading.measurable and component is not None
         quantity = component.quantity_for(reading.weight) if measurable and component else None
@@ -129,6 +136,15 @@ class TelemetryService:
             remaining=assembly.remaining_for(box_id, reading.locker_id, nfc_id, quantity),
             blink=blink,
         )
+
+    async def _check_found(self, pulled_nfc_id: str) -> None:
+        """The person found what they were looking for as soon as they pull out one of its cells."""
+        if self._locator.current() is None:
+            return
+        component = await self._find_component(pulled_nfc_id)
+        if component is not None and self._locator.matches(component.name):
+            logger.info("Located '%s': cell %s pulled out, search is over", component.name, pulled_nfc_id)
+            self._found = True
 
     def _observe(self, state: LockerState, observation: SlotObservation, now: float) -> None:
         """Start waiting for a reading the journal does not have yet; a return to the journal's view drops it."""

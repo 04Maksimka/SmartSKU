@@ -305,3 +305,18 @@ class TestAssembly:
         bench.locate.stop()
         await self._send(bench, {"s1": 20, "s2": 15, "n1": 8, "w1": 50})
         assert bench.publisher.blinking() == [False, False, False, False]
+
+    async def test_pulling_out_a_located_cell_ends_the_search(self, bench: Bench) -> None:
+        await self._hold(bench, s1=20, s2=15, n1=8, w1=50)
+        await bench.locate.start("Шуруп 4x30")
+        await self._send(bench, {"s1": 20, "s2": 15, "n1": 8, "w1": 50})
+        assert bench.publisher.blinking() == [True, True, False, False]
+
+        # Another cell pulled out does not end it
+        await self._send(bench, {"s1": 20, "s2": 15, "n1": None, "w1": 50})
+        assert await bench.locate.current() is not None
+
+        await self._send(bench, {"s1": None, "s2": 15, "n1": None, "w1": 50})
+        assert await bench.locate.current() is None
+        await self._send(bench, {"s1": None, "s2": 15, "n1": None, "w1": 50})
+        assert bench.publisher.blinking() == [False, False, False, False]
