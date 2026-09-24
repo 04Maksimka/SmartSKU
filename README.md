@@ -115,6 +115,13 @@
 накладывается на её задания (`t N` мигает, погашенный дисплей так и остаётся тёмным). API: `GET /api/locate` (текущий
 поиск или `null`), `POST /api/locate {"component_name"}` (404 — такого компонента нет), `DELETE /api/locate`.
 
+**Порог «заканчивается» (с 2026-09-24).** При калибровке можно задать необязательный порог `low_stock`: когда в ячейке
+остаётся меньше штук, дашборд ненавязчиво предупреждает — жёлтая плашка на карточке слота, жёлтое число со «▾» на
+схеме стенда, «заканчивается» в таблице компонентов и «N мало» в сводке. Бокс это никак не показывает. Сравнивается
+количество из журнала (`components.quantity`), поэтому предупреждение не дёргается, пока рука в ячейке. Порог хранится
+у компонента (едет с ячейкой); изменить или убрать — в таблице «Компоненты» (`PUT /api/components/{nfc_id}/low-stock
+{"low_stock": N | null}`). В `ComponentSchema` — `low_stock` и вычисленный `running_low`.
+
 **Дальше:** переносить во фронт остальные сценарии (поиск/фильтры компонентов, история по ячейке), миграции БД (Alembic), своя учётка брокера на каждый бокс (сейчас общая `box`), бэкапы SQLite на VPS.
 
 ## Архитектура
@@ -195,7 +202,7 @@
 - `locker_states` — последнее состояние слота `(box_id, locker_id)`: вставлена ли ячейка, какая, вес, количество,
   `slot_ready`, `cell_tared`, `tag_error`, шаг калибровки (`calibration_step`, `calibration_pieces`); что последним
   записано в журнал — `logged_nfc_id`, `logged_quantity`.
-- `components` — что лежит в ячейке, **ключ — `nfc_id`**: имя, теги, вес штуки, количество.
+- `components` — что лежит в ячейке, **ключ — `nfc_id`**: имя, теги, вес штуки, количество, порог `low_stock`.
   Так калибровка «едет» вместе с ячейкой при перестановке в другой слот или бокс (тара и вес штуки — ещё и в метке);
   количество бэкенд считает сам по своему `piece_weight`.
 - `calibrations` — заявки на калибровку (`pending` → `completed` / `cancelled`).
@@ -493,10 +500,10 @@ arduino-cli upload  -b $FQBN -p /dev/cu.usbserial-XXXX firmware/smartsku_box
 
 ### Сценарий калибровки
 Кнопка «Калибровка» вверху или «Откалибровать» на карточке слота → выбрать вставленную свободную ячейку (слот
-настроен, у ячейки есть тара) → название, теги, N штук → чек-лист; шаги отмечаются сами по действиям у стенда.
+настроен, у ячейки есть тара) → название, теги, N штук, необязательный порог «заканчивается» → чек-лист; шаги отмечаются сами по действиям у стенда.
 Итог — «1 шт = … г», компонент появляется в таблице, количество считается.
 
-Через API: `POST /api/calibrations {"box_id","locker_id","name","tags","num_of_pieces"}`, дальше руками у бокса,
+Через API: `POST /api/calibrations {"box_id","locker_id","name","tags","num_of_pieces","low_stock"}`, дальше руками у бокса,
 ход — в `GET /api/lockers` (`calibration.step`), итог — `GET /api/calibrations`, журнал — `GET /api/events`.
 
 ### REST API бэкенда
@@ -507,7 +514,8 @@ arduino-cli upload  -b $FQBN -p /dev/cu.usbserial-XXXX firmware/smartsku_box
   или не рядом; `DELETE /api/boxes/{box_id}/placement` — убрать со стенда; `PATCH /api/boxes/{box_id} {"alias"}`
 - `GET /api/lockers?box_id=&free=`
 - `POST /api/calibrations`, `GET /api/calibrations?status=`, `DELETE /api/calibrations/{id}` (отменить заявку)
-- `GET /api/components?search=&tag=`, `DELETE /api/components/{nfc_id}` — освободить ячейку под другой компонент
+- `GET /api/components?search=&tag=`, `DELETE /api/components/{nfc_id}` — освободить ячейку под другой компонент,
+  `PUT /api/components/{nfc_id}/low-stock {"low_stock": N | null}` — порог «заканчивается»
 - `GET /api/events?box_id=&nfc_id=&limit=`
 - `GET/POST /api/specifications`, `PUT/DELETE /api/specifications/{id}` (`{"name", "items": [{"component_name",
   "quantity"}]}`), `GET /api/specifications/{id}/availability?kits=` — хватает ли и из каких ячеек брать

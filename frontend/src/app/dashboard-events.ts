@@ -1,4 +1,4 @@
-import type { Assembly, Calibration, Cluster } from "../api/types";
+import type { Assembly, Calibration, Cluster, Component } from "../api/types";
 import type { LockerOverview } from "./dashboard-store";
 
 export interface CancelCalibrationRequest {
@@ -31,6 +31,7 @@ export class DashboardEvents {
   static readonly RENAME_CLUSTER = "sku-rename-cluster";
   static readonly CANCEL_ASSEMBLY = "sku-cancel-assembly";
   static readonly LOCATE = "sku-locate";
+  static readonly SET_LOW_STOCK = "sku-set-low-stock";
 
   calibrate(target: EventTarget, locker: LockerOverview | null): void {
     this.dispatch(target, DashboardEvents.CALIBRATE, locker);
@@ -80,6 +81,11 @@ export class DashboardEvents {
   /** Finds a component on the stands: its cells light up and their displays blink. */
   locate(target: EventTarget, componentName: string): void {
     this.dispatch(target, DashboardEvents.LOCATE, componentName);
+  }
+
+  /** Asks for the level below which the dashboard warns that the component is running low. */
+  setLowStock(target: EventTarget, component: Component): void {
+    this.dispatch(target, DashboardEvents.SET_LOW_STOCK, component);
   }
 
   private dispatch(target: EventTarget, type: string, detail: unknown): void {

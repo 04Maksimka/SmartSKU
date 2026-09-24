@@ -72,6 +72,15 @@ export class LockerTile extends LitElement {
         box-shadow: 0 0 0 3px var(--accent-soft);
       }
 
+      .low-label {
+        margin: 8px 8px 0;
+        padding: 5px 10px;
+        border-radius: 8px;
+        font-size: 12.5px;
+        background: var(--tone-warn-bg);
+        color: var(--tone-warn);
+      }
+
       .found-label {
         margin: 8px 8px 0;
         padding: 6px 10px;
@@ -389,6 +398,7 @@ export class LockerTile extends LitElement {
         ${this.overview.search === "match"
           ? html`<div class="found-label">🔍 Ищем: дисплей мигает</div>`
           : nothing}
+        ${this.renderLowStock()}
         <div class="details">
           ${locker.nfc_flag ? this.renderInserted() : this.renderPulledOut()}
           ${locker.calibration ? this.renderCalibration() : this.renderSetupNote()}
@@ -399,6 +409,18 @@ export class LockerTile extends LitElement {
         </div>
       </div>
     `;
+  }
+
+  /** A quiet hint on the dashboard only: the box keeps showing the count as usual. */
+  private renderLowStock() {
+    const { locker } = this.overview;
+    const component = locker.component;
+    if (!locker.nfc_flag || component === null || !component.running_low || this.overview.assembly !== null) {
+      return nothing;
+    }
+    return html`<div class="low-label" title="Порог задан при калибровке, его можно изменить во вкладке «Компоненты»">
+      Заканчивается: меньше ${component.low_stock} шт
+    </div>`;
   }
 
   /** The step the box waits for, so the person at the rack knows what to do without opening the dialog. */

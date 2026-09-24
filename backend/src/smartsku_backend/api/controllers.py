@@ -23,6 +23,7 @@ from smartsku_backend.api.schemas import (
     LocateRequest,
     LocateSchema,
     LockerSchema,
+    LowStockRequest,
     OnboardingSettingsSchema,
     ScaleRequest,
     ScaleResultSchema,
@@ -158,6 +159,7 @@ class CalibrationController:
             name=request.name,
             tags=request.tags,
             num_of_pieces=request.num_of_pieces,
+            low_stock=request.low_stock,
         )
         return CalibrationSchema.model_validate(calibration)
 
@@ -185,6 +187,12 @@ class ComponentsController:
             status_code=status.HTTP_204_NO_CONTENT,
         )
         self.router.add_api_route(
+            "/components/{nfc_id}/low-stock",
+            self.set_low_stock,
+            methods=["PUT"],
+            response_model=ComponentSchema,
+        )
+        self.router.add_api_route(
             "/events", self.list_events, methods=["GET"], response_model=list[InventoryEventSchema]
         )
 
@@ -198,6 +206,11 @@ class ComponentsController:
 
     async def release_component(self, nfc_id: str, components: FromDishka[ComponentService]) -> None:
         await components.release(nfc_id)
+
+    async def set_low_stock(
+        self, nfc_id: str, request: LowStockRequest, components: FromDishka[ComponentService]
+    ) -> ComponentSchema:
+        return ComponentSchema.model_validate(await components.set_low_stock(nfc_id, request.low_stock))
 
     async def list_events(
         self,

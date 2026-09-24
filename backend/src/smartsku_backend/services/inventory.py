@@ -64,3 +64,12 @@ class ComponentService:
             # Next telemetry from this box is reprocessed, which switches the released cell's indicators off.
             self._cache.forget_box(state.box_id)
         await self._session.commit()
+
+    async def set_low_stock(self, nfc_id: str, low_stock: int | None) -> Component:
+        """Change or drop the level below which the dashboard warns that the cell is running low."""
+        component = await self._session.get(Component, nfc_id)
+        if component is None:
+            raise NotFoundError(f"Component in cell {nfc_id} not found")
+        component.low_stock = low_stock
+        await self._session.commit()
+        return component

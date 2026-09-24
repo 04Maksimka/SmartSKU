@@ -60,7 +60,13 @@ class ComponentSchema(OrmSchema):
     tags: list[str]
     piece_weight: float
     quantity: int
+    low_stock: int | None = Field(description="Warn once fewer pieces are left, null for no warning")
+    running_low: bool
     calibrated_at: datetime
+
+
+class LowStockRequest(BaseModel):
+    low_stock: int | None = Field(ge=1)
 
 
 class CalibrationProgressSchema(BaseModel):
@@ -102,6 +108,7 @@ class CalibrationRequest(BaseModel):
     name: str = Field(min_length=1)
     tags: list[str] = Field(default_factory=list)
     num_of_pieces: int = Field(gt=0)
+    low_stock: int | None = Field(default=None, ge=1, description="Warn once fewer pieces are left")
 
 
 class CalibrationSchema(OrmSchema):
@@ -111,6 +118,7 @@ class CalibrationSchema(OrmSchema):
     name: str
     tags: list[str]
     num_of_pieces: int
+    low_stock: int | None
     status: CalibrationStatus
     nfc_id: str | None
     piece_weight: float | None

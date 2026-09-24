@@ -80,6 +80,11 @@ export class CommandService {
     await this.store.refreshNow();
   }
 
+  async setLowStock(nfcId: string, lowStock: number | null): Promise<void> {
+    await this.api.setLowStock(nfcId, lowStock);
+    await this.store.refreshNow();
+  }
+
   /** Saves a new specification, or changes the one with this id. */
   async saveSpecification(specificationId: number | null, request: SpecificationRequest): Promise<void> {
     if (specificationId === null) {

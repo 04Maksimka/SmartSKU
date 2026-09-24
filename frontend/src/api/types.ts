@@ -30,6 +30,9 @@ export interface Component {
   tags: string[];
   piece_weight: number;
   quantity: number;
+  /** Warn on the dashboard once fewer pieces are left; null for no warning. The box does not show it. */
+  low_stock: number | null;
+  running_low: boolean;
   calibrated_at: string;
 }
 
@@ -80,6 +83,7 @@ export interface Calibration {
   name: string;
   tags: string[];
   num_of_pieces: number;
+  low_stock: number | null;
   status: CalibrationStatus;
   nfc_id: string | null;
   piece_weight: number | null;
@@ -93,6 +97,7 @@ export interface CalibrationRequest {
   name: string;
   tags: string[];
   num_of_pieces: number;
+  low_stock: number | null;
 }
 
 export type InventoryEventType =

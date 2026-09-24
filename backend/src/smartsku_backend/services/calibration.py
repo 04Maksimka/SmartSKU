@@ -28,6 +28,7 @@ class CalibrationService:
         name: str,
         tags: list[str],
         num_of_pieces: int,
+        low_stock: int | None = None,
     ) -> Calibration:
         box = await self._session.get(Box, box_id)
         if box is None:
@@ -63,6 +64,7 @@ class CalibrationService:
             name=name,
             tags=tags,
             num_of_pieces=num_of_pieces,
+            low_stock=low_stock,
             status=CalibrationStatus.PENDING,
         )
         self._session.add(calibration)
