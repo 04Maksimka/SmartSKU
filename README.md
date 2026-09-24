@@ -398,6 +398,12 @@ git ls-files -co --exclude-standard -- backend frontend infra json_contracts doc
 ssh smartsku-vps 'cd /opt/smartsku && chown 1883:1883 infra/mosquitto/acl \
   && docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build'
 ```
+**Гостевая ссылка без пароля** (демо, жюри): `https://app-smartsku.online/?guest=<SMARTSKU_GUEST_TOKEN>` — Caddy ставит
+cookie `skubox_guest` и открывает дашборд с полными правами до `SMARTSKU_GUEST_UNTIL` (unix-время); потом ссылка и
+cookie перестают работать сами. Токен и срок — в `.env` на сервере; новая ссылка: сгенерировать токен
+(`python3 -c 'import secrets; print(secrets.token_urlsafe(24))'`), записать оба значения и
+`docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --force-recreate caddy`. Отозвать раньше срока —
+очистить токен и так же пересоздать caddy.
 Сменить пароль дашборда: `docker run --rm caddy:2 caddy hash-password --plaintext '<пароль>'`, записать хеш в `.env`
 (каждый `$` → `$$`) и перезапустить `caddy`.
 
