@@ -5,7 +5,7 @@ api_base_url: ""
 refresh_interval_ms: 1000
 # How many latest inventory events the log keeps
 events_limit: 200
-# How many latest calibrations are listed
+# How many latest calibrations the dashboard keeps to follow the running ones (the history is in the journal)
 calibrations_limit: 20
 # How many latest assemblies the "Сборка" tab lists
 assemblies_limit: 20

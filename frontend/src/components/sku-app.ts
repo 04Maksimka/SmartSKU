@@ -765,12 +765,6 @@ export class SkuApp extends LitElement {
           <section>
             <sku-component-table .items=${snapshot.components}></sku-component-table>
           </section>
-          <section>
-            <sku-calibration-list
-              .calibrations=${snapshot.calibrations}
-              .boxNames=${snapshot.boxNames}
-            ></sku-calibration-list>
-          </section>
         `;
       case "journal":
         return html`<section>
