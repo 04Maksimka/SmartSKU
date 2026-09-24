@@ -411,6 +411,12 @@ cookie перестают работать сами. Токен и срок — 
 (`python3 -c 'import secrets; print(secrets.token_urlsafe(24))'`), записать оба значения и
 `docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --force-recreate caddy`. Отозвать раньше срока —
 очистить токен и так же пересоздать caddy.
+**Ссылка только для просмотра** — так же, `https://app-smartsku.online/?view=<SMARTSKU_VIEWER_TOKEN>` до
+`SMARTSKU_VIEWER_UNTIL`, cookie `skubox_viewer`. Смотреть можно всё, искать компонент («Найти» — `POST/DELETE
+/api/locate`) тоже; любой другой запрос кроме GET Caddy отклоняет с 403, не доходя до бэкенда. Кнопки на дашборде
+остаются, но не действуют: фронт при старте спрашивает `GET /api/access` (отвечает только Caddy в этом режиме,
+`{"read_only": true}`; в остальных — 404, полный доступ) и тогда `CommandService` ничего не пишет, а нажатие показывает
+«Режим только просмотра». Проверка склада в диалоге сборки работает (это GET).
 Сменить пароль дашборда: `docker run --rm caddy:2 caddy hash-password --plaintext '<пароль>'`, записать хеш в `.env`
 (каждый `$` → `$$`) и перезапустить `caddy`.
 

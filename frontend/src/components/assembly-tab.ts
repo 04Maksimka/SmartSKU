@@ -2,7 +2,7 @@ import { LitElement, css, html, nothing } from "lit";
 import { repeat } from "lit/directives/repeat.js";
 
 import type { Assembly, Specification } from "../api/types";
-import type { CommandService } from "../app/command-service";
+import { CommandService } from "../app/command-service";
 import type { BoxOverview } from "../app/dashboard-store";
 import { Formatter } from "../app/formatter";
 import type { AssemblyDialog } from "./assembly-dialog";
@@ -198,7 +198,7 @@ export class AssemblyTab extends LitElement {
     return html`
       <div class="section-title">
         <h2>Спецификации<span class="count">${this.specifications.length}</span></h2>
-        <button class="primary" @click=${() => this.specificationDialog()?.open(null)}>+ Новая спецификация</button>
+        <button class="primary" @click=${() => this.editSpecification(null)}>+ Новая спецификация</button>
       </div>
       ${this.specifications.length
         ? html`<div class="specs">
@@ -213,7 +213,7 @@ export class AssemblyTab extends LitElement {
               Спецификация — это изделие и сколько каких компонентов на него уходит, например стол: 20 шурупов, 10 гаек.
               По ней система проверит склад и подсветит нужные ячейки.
             </div>
-            <button class="primary" @click=${() => this.specificationDialog()?.open(null)}>Создать спецификацию</button>
+            <button class="primary" @click=${() => this.editSpecification(null)}>Создать спецификацию</button>
           </div>`}
     `;
   }
@@ -236,7 +236,7 @@ export class AssemblyTab extends LitElement {
         >
           ${running ? "Собирается…" : "Собрать"}
         </button>
-        <button @click=${() => this.specificationDialog()?.open(specification)}>Изменить</button>
+        <button @click=${() => this.editSpecification(specification)}>Изменить</button>
         <button class="danger" @click=${() => void this.deleteSpecification(specification)}>Удалить</button>
       </div>
     </div>`;
@@ -288,6 +288,10 @@ export class AssemblyTab extends LitElement {
   }
 
   private async deleteSpecification(specification: Specification): Promise<void> {
+    if (this.service.readOnly) {
+      this.error = CommandService.READ_ONLY_MESSAGE;
+      return;
+    }
     if (!confirm(`Удалить спецификацию «${specification.name}»? История сборок по ней останется.`)) {
       return;
     }
@@ -297,6 +301,15 @@ export class AssemblyTab extends LitElement {
     } catch (error) {
       this.error = error instanceof Error ? error.message : String(error);
     }
+  }
+
+  private editSpecification(specification: Specification | null): void {
+    if (this.service.readOnly) {
+      this.error = CommandService.READ_ONLY_MESSAGE;
+      return;
+    }
+    this.error = null;
+    this.specificationDialog()?.open(specification);
   }
 
   private specificationDialog(): SpecificationDialog | null {
