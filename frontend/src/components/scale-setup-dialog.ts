@@ -204,9 +204,9 @@ export class ScaleSetupDialog extends LitElement {
         this.boxes.length > 1
           ? html`<div class="boxes">
               ${this.boxes.map(
-                ({ box }) =>
+                ({ box, name }) =>
                   html`<button class=${box.id === this.boxId ? "primary" : ""} @click=${() => this.selectBox(box.id)}>
-                    ${box.hardware_id}
+                    ${name}
                   </button>`,
               )}
             </div>`

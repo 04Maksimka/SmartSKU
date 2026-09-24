@@ -59,6 +59,11 @@ class OnboardingConfig(BaseModel):
     claim_ttl_minutes: float = 30
 
 
+class LayoutConfig(BaseModel):
+    # A new stand is named "<prefix> N"; the user can rename it
+    cluster_name_prefix: str = "Стенд"
+
+
 class LoggingConfig(BaseModel):
     level: str
 
@@ -70,6 +75,7 @@ class AppConfig(BaseModel):
     telemetry: TelemetryConfig
     scale: ScaleConfig = ScaleConfig()
     onboarding: OnboardingConfig
+    layout: LayoutConfig = LayoutConfig()
     logging: LoggingConfig
 
 

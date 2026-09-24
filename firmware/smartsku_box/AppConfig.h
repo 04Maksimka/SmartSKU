@@ -16,7 +16,7 @@ struct LockerHardware {
 // Настройки прошивки. Сеть и адрес брокера задаются с фронта по Bluetooth и хранятся в NVS (см. NetworkSettings)
 struct AppConfig {
   // Показывается на фронте при подключении бокса
-  static constexpr const char *FIRMWARE_VERSION = "0.8.1";
+  static constexpr const char *FIRMWARE_VERSION = "0.8.2";
   static constexpr unsigned long SERIAL_BAUD = 115200;
   // Встроенный светодиод платы: мигает, пока нет связи с брокером; горит, когда бокс работает
   static constexpr int STATUS_LED_PIN = 2;

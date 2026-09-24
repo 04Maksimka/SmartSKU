@@ -1,5 +1,5 @@
 import type { ApiClient } from "../api/client";
-import type { Box, Calibration, Component, InventoryEvent, Locker } from "../api/types";
+import type { Box, Calibration, Cluster, Component, InventoryEvent, Locker } from "../api/types";
 import type { AppConfig } from "../config/app-config";
 
 export interface LockerOverview {
@@ -12,9 +12,17 @@ export interface LockerOverview {
 
 export interface BoxOverview {
   box: Box;
+  /** How people call the box: its address on the stand (B1), or its hardware id while it is not placed. */
+  name: string;
   lockers: LockerOverview[];
   /** Slots per row, as in the physical box. */
   columns: number;
+}
+
+/** A stand of joined boxes, laid out like it stands, seen from the front. */
+export interface ClusterOverview {
+  cluster: Cluster;
+  boxes: BoxOverview[];
 }
 
 export interface ComponentOverview {
@@ -25,6 +33,9 @@ export interface ComponentOverview {
 
 export interface DashboardSnapshot {
   boxes: BoxOverview[];
+  clusters: ClusterOverview[];
+  /** Boxes that are registered but not placed on a stand yet. */
+  unplaced: BoxOverview[];
   components: ComponentOverview[];
   calibrations: Calibration[];
   events: InventoryEvent[];
@@ -40,6 +51,8 @@ export class DashboardStore {
   private readonly listeners = new Set<SnapshotListener>();
   private snapshot: DashboardSnapshot = {
     boxes: [],
+    clusters: [],
+    unplaced: [],
     components: [],
     calibrations: [],
     events: [],
@@ -100,14 +113,15 @@ export class DashboardStore {
 
   private async refresh(): Promise<void> {
     try {
-      const [boxes, lockers, components, calibrations, events] = await Promise.all([
+      const [boxes, clusters, lockers, components, calibrations, events] = await Promise.all([
         this.api.boxes(),
+        this.api.clusters(),
         this.api.lockers(),
         this.api.components(),
         this.api.calibrations(),
         this.api.events(this.config.eventsLimit),
       ]);
-      this.snapshot = this.build(boxes, lockers, components, calibrations, events);
+      this.snapshot = this.build(boxes, clusters, lockers, components, calibrations, events);
     } catch (error) {
       this.snapshot = { ...this.snapshot, error: error instanceof Error ? error.message : String(error) };
     }
@@ -118,12 +132,13 @@ export class DashboardStore {
 
   private build(
     boxes: Box[],
+    clusters: Cluster[],
     lockers: Locker[],
     components: Component[],
     calibrations: Calibration[],
     events: InventoryEvent[],
   ): DashboardSnapshot {
-    const boxNames = new Map(boxes.map((box) => [box.id, box.hardware_id]));
+    const boxNames = new Map(boxes.map((box) => [box.id, this.boxName(box, clusters)]));
     const newestFirst = [...calibrations].sort((left, right) => right.id - left.id);
     const overviews = lockers.map<LockerOverview>((locker) => ({
       locker,
@@ -142,14 +157,24 @@ export class DashboardStore {
           ) ?? null),
     }));
 
+    const boxOverviews = boxes.map<BoxOverview>((box) => ({
+      box,
+      name: boxNames.get(box.id) ?? box.id,
+      lockers: overviews
+        .filter((item) => item.locker.box_id === box.id)
+        .sort((left, right) => left.locker.locker_id - right.locker.locker_id),
+      columns: this.config.boxColumns,
+    }));
+
     return {
-      boxes: boxes.map((box) => ({
-        box,
-        lockers: overviews
-          .filter((item) => item.locker.box_id === box.id)
-          .sort((left, right) => left.locker.locker_id - right.locker.locker_id),
-        columns: this.config.boxColumns,
+      boxes: boxOverviews,
+      clusters: clusters.map((cluster) => ({
+        cluster,
+        boxes: boxOverviews.filter((item) => item.box.cluster_id === cluster.id),
       })),
+      unplaced: boxOverviews.filter(
+        (item) => item.box.cluster_id === null || !clusters.some((cluster) => cluster.id === item.box.cluster_id),
+      ),
       components: components.map((component) => ({
         component,
         location:
@@ -161,5 +186,14 @@ export class DashboardStore {
       updatedAt: new Date(),
       error: null,
     };
+  }
+
+  /** The stand name is added only when there are several stands: with one, the address alone is unambiguous. */
+  private boxName(box: Box, clusters: Cluster[]): string {
+    if (box.address === null) {
+      return box.hardware_id;
+    }
+    const cluster = clusters.find((item) => item.id === box.cluster_id);
+    return clusters.length > 1 && cluster ? `${cluster.name} · ${box.address}` : box.address;
   }
 }

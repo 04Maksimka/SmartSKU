@@ -1,10 +1,15 @@
 import { LitElement, css, html, nothing } from "lit";
 import { repeat } from "lit/directives/repeat.js";
 
-import type { Calibration } from "../api/types";
+import type { Calibration, Cluster } from "../api/types";
 import type { CommandService } from "../app/command-service";
-import { DashboardEvents, type CancelCalibrationRequest, type ReleaseComponentRequest } from "../app/dashboard-events";
-import type { DashboardSnapshot, DashboardStore, LockerOverview } from "../app/dashboard-store";
+import {
+  DashboardEvents,
+  type CancelCalibrationRequest,
+  type PlaceAtRequest,
+  type ReleaseComponentRequest,
+} from "../app/dashboard-events";
+import type { BoxOverview, DashboardSnapshot, DashboardStore, LockerOverview } from "../app/dashboard-store";
 import { Formatter } from "../app/formatter";
 import { ThemePreference, type ThemeChoice } from "../app/theme-preference";
 import type { BoxSetupDialog } from "./box-setup-dialog";
@@ -30,6 +35,9 @@ export class SkuApp extends LitElement {
     actionError: { state: true },
     tab: { state: true },
     theme: { state: true },
+    editingLayout: { state: true },
+    placingBoxId: { state: true },
+    selectedBoxId: { state: true },
   };
 
   static override styles = [
@@ -273,10 +281,73 @@ export class SkuApp extends LitElement {
         margin-top: 36px;
       }
 
-      .boxes {
+      .mini-row {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(min(100%, 460px), 1fr));
-        gap: 16px;
+        grid-template-columns: repeat(auto-fill, minmax(140px, 190px));
+        gap: 8px;
+      }
+
+      /* The stand map and the card of the chosen box side by side; on narrow screens the card goes below */
+      .stands-layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 600px);
+        align-items: start;
+        gap: 24px;
+      }
+
+      .box-detail {
+        position: sticky;
+        top: 78px;
+        scroll-margin-top: 80px;
+      }
+
+      @media (max-width: 1100px) {
+        .stands-layout {
+          grid-template-columns: minmax(0, 1fr);
+        }
+
+        .box-detail {
+          position: static;
+          max-width: 640px;
+        }
+      }
+
+
+      .layout-bar {
+        min-height: 36px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 8px 16px;
+        margin-bottom: 16px;
+        font-size: 13px;
+      }
+
+      .placing {
+        position: sticky;
+        top: 70px;
+        z-index: 40;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 10px 16px;
+        margin-bottom: 20px;
+        padding: 12px 14px;
+        border-color: var(--accent);
+      }
+
+      .placing .buttons {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      @media (max-width: 720px) {
+        .placing {
+          top: 120px;
+        }
       }
 
       .empty-state {
@@ -303,6 +374,12 @@ export class SkuApp extends LitElement {
   declare actionError: string | null;
   declare tab: Tab;
   declare theme: ThemeChoice;
+  /** The stands are being rearranged: box cards offer to move, rename or take a box off its stand. */
+  declare editingLayout: boolean;
+  /** Box the user is choosing a place on a stand for. */
+  declare placingBoxId: string | null;
+  /** Box whose full card is open under the stand map. */
+  declare selectedBoxId: string | null;
 
   private readonly format = new Formatter();
   private readonly themePreference = new ThemePreference();
@@ -316,6 +393,9 @@ export class SkuApp extends LitElement {
   constructor() {
     super();
     this.actionError = null;
+    this.editingLayout = false;
+    this.placingBoxId = null;
+    this.selectedBoxId = null;
     this.tab = this.tabFromHash();
     this.theme = this.themePreference.current();
     this.themePreference.apply(this.theme);
@@ -356,11 +436,17 @@ export class SkuApp extends LitElement {
     this.addEventListener(DashboardEvents.SCALE_SETUP, this.handleScaleSetup);
     this.addEventListener(DashboardEvents.CANCEL_CALIBRATION, this.handleCancelCalibration);
     this.addEventListener(DashboardEvents.RELEASE_COMPONENT, this.handleReleaseComponent);
+    this.addEventListener(DashboardEvents.SELECT_BOX, this.handleSelectBox);
+    this.addEventListener(DashboardEvents.PLACE_BOX, this.handlePlaceBox);
+    this.addEventListener(DashboardEvents.PLACE_AT, this.handlePlaceAt);
+    this.addEventListener(DashboardEvents.RENAME_CLUSTER, this.handleRenameCluster);
     window.addEventListener("hashchange", this.handleHashChange);
+    window.addEventListener("keydown", this.handleKeydown);
   }
 
   override disconnectedCallback(): void {
     window.removeEventListener("hashchange", this.handleHashChange);
+    window.removeEventListener("keydown", this.handleKeydown);
     super.disconnectedCallback();
     this.unsubscribe?.();
     this.removeEventListener(DashboardEvents.CALIBRATE, this.handleCalibrate);
@@ -368,6 +454,10 @@ export class SkuApp extends LitElement {
     this.removeEventListener(DashboardEvents.SCALE_SETUP, this.handleScaleSetup);
     this.removeEventListener(DashboardEvents.CANCEL_CALIBRATION, this.handleCancelCalibration);
     this.removeEventListener(DashboardEvents.RELEASE_COMPONENT, this.handleReleaseComponent);
+    this.removeEventListener(DashboardEvents.SELECT_BOX, this.handleSelectBox);
+    this.removeEventListener(DashboardEvents.PLACE_BOX, this.handlePlaceBox);
+    this.removeEventListener(DashboardEvents.PLACE_AT, this.handlePlaceAt);
+    this.removeEventListener(DashboardEvents.RENAME_CLUSTER, this.handleRenameCluster);
   }
 
   private readonly handleCalibrate = (event: Event): void => {
@@ -401,6 +491,80 @@ export class SkuApp extends LitElement {
     const request = (event as CustomEvent<ReleaseComponentRequest>).detail;
     if (confirm(`Освободить ячейку: ${request.label}? Бэкенд забудет, что в ней лежит.`)) {
       void this.run(() => this.commands.releaseComponent(request.nfcId));
+    }
+  };
+
+  /** While rearranging, tapping a box on the map picks it up (tapping it again puts it back); otherwise it opens its card. */
+  private readonly handleSelectBox = (event: Event): void => {
+    const boxId = (event as CustomEvent<string>).detail;
+    this.selectedBoxId = boxId;
+    if (this.editingLayout || this.placingBoxId !== null) {
+      this.actionError = null;
+      this.placingBoxId = this.placingBoxId === boxId ? null : boxId;
+      return;
+    }
+    // On a phone the card opens below the map, out of sight
+    void this.updateComplete.then(() =>
+      this.renderRoot.querySelector(".box-detail")?.scrollIntoView({ block: "nearest", behavior: "smooth" }),
+    );
+  };
+
+  /** The first box starts a stand right away; otherwise the stands show where the box can go. */
+  private readonly handlePlaceBox = (event: Event): void => {
+    const boxId = (event as CustomEvent<string>).detail;
+    this.actionError = null;
+    this.selectedBoxId = boxId;
+    if (location.hash !== "#boxes") {
+      location.hash = "boxes";
+    }
+    if (this.snapshot.clusters.length === 0) {
+      void this.run(() => this.commands.placeBox(boxId, null));
+    } else {
+      this.placingBoxId = boxId;
+    }
+  };
+
+  private readonly handlePlaceAt = (event: Event): void => {
+    const request = (event as CustomEvent<PlaceAtRequest>).detail;
+    const boxId = this.placingBoxId;
+    if (boxId !== null) {
+      void this.run(async () => {
+        await this.commands.placeBox(boxId, request.clusterId, request.x, request.y);
+        this.placingBoxId = null;
+      });
+    }
+  };
+
+  private readonly handleKeydown = (event: KeyboardEvent): void => {
+    if (event.key === "Escape" && this.placingBoxId !== null) {
+      this.placingBoxId = null;
+    }
+  };
+
+  private unplaceBox(item: BoxOverview): void {
+    const question =
+      `Убрать бокс ${item.name} со стенда? Учёт по нему продолжится, а на дашборде он будет в «Не размещены».` +
+      " Адреса остальных боксов стенда могут сдвинуться.";
+    if (confirm(question)) {
+      void this.run(async () => {
+        await this.commands.unplaceBox(item.box.id);
+        this.placingBoxId = null;
+      });
+    }
+  }
+
+  private renameBox(item: BoxOverview): void {
+    const alias = prompt(`Название бокса ${item.name}, например, что в нём лежит. Пусто — без названия.`, item.box.alias ?? "");
+    if (alias !== null) {
+      void this.run(() => this.commands.renameBox(item.box.id, alias.trim() || null));
+    }
+  }
+
+  private readonly handleRenameCluster = (event: Event): void => {
+    const cluster = (event as CustomEvent<Cluster>).detail;
+    const name = prompt("Название стенда", cluster.name)?.trim();
+    if (name) {
+      void this.run(() => this.commands.renameCluster(cluster.id, name));
     }
   };
 
@@ -539,24 +703,133 @@ export class SkuApp extends LitElement {
         return html`
           <div class="actions-inline">${this.renderActions()}</div>
           ${snapshot.boxes.length ? this.renderSummary() : nothing}
-          <section>
-            <div class="section-title"><h2>Боксы<span class="count">${snapshot.boxes.length}</span></h2></div>
-            ${snapshot.boxes.length
-              ? html`<div class="boxes">
-                  ${repeat(
-                    snapshot.boxes,
-                    (item) => item.box.id,
-                    (item) => html`<sku-box-card .overview=${item}></sku-box-card>`,
-                  )}
-                </div>`
-              : html`<div class="card empty empty-state">
+          ${snapshot.boxes.length
+            ? this.renderStands()
+            : html`<section>
+                <div class="card empty empty-state">
                   <div>Устройств нет. Зажмите кнопку подключения на боксе на 3 секунды и подключите его по Bluetooth.</div>
                   <button class="primary" @click=${this.openSetup}>Подключить бокс</button>
-                </div>`}
-          </section>
+                </div>
+              </section>`}
         `;
     }
   }
+
+  /** Stands laid out as they stand, then the boxes that have no place yet. */
+  private renderStands() {
+    const snapshot = this.snapshot;
+    const placing = snapshot.boxes.find((item) => item.box.id === this.placingBoxId) ?? null;
+    const selected = this.selectedBox();
+    return html`
+      ${this.renderLayoutBar(placing)}
+      <div class="stands-layout">
+        <div class="stands">
+          ${repeat(
+            snapshot.clusters,
+            (item) => item.cluster.id,
+            (item) => html`<section>
+              <sku-stand-view
+                .overview=${item}
+                ?editing=${this.editingLayout}
+                .placing=${placing}
+                .selectedBoxId=${selected?.box.id ?? null}
+              ></sku-stand-view>
+            </section>`,
+          )}
+          ${snapshot.unplaced.length
+            ? html`<section>
+                <div class="section-title">
+                  <h2>Не размещены<span class="count">${snapshot.unplaced.length}</span></h2>
+                </div>
+                <div class="mini-row">
+                  ${repeat(
+                    snapshot.unplaced,
+                    (item) => item.box.id,
+                    (item) => html`<sku-box-mini
+                      .overview=${item}
+                      ?selected=${item.box.id === selected?.box.id}
+                      ?moving=${item.box.id === this.placingBoxId}
+                      ?arranging=${this.editingLayout || placing !== null}
+                    ></sku-box-mini>`,
+                  )}
+                </div>
+              </section>`
+            : nothing}
+        </div>
+        ${selected
+          ? html`<div class="box-detail">
+              <sku-box-card .overview=${selected} ?moving=${selected.box.id === this.placingBoxId}></sku-box-card>
+            </div>`
+          : nothing}
+      </div>
+    `;
+  }
+
+  /** The chosen box, or the first one on the map so the page never opens empty. */
+  private selectedBox(): BoxOverview | null {
+    const snapshot = this.snapshot;
+    const ordered = [...snapshot.clusters.flatMap((item) => item.boxes), ...snapshot.unplaced];
+    return ordered.find((item) => item.box.id === this.selectedBoxId) ?? ordered[0] ?? null;
+  }
+
+  /** Above the map: how addresses read and the switch into rearranging; while rearranging, what to tap next and
+   * what else can be done with the picked box. */
+  private renderLayoutBar(placing: BoxOverview | null) {
+    if (!this.editingLayout && placing === null) {
+      return this.snapshot.clusters.length
+        ? html`<div class="layout-bar">
+            <span class="muted">
+              Адрес бокса — столбец (A, B… слева направо) и ряд (1, 2… снизу вверх), как стоят боксы на стенде.
+            </span>
+            <button @click=${() => (this.editingLayout = true)}>Изменить расстановку</button>
+          </div>`
+        : nothing;
+    }
+    const alone =
+      placing !== null &&
+      placing.box.cluster_id !== null &&
+      !this.snapshot.boxes.some((item) => item.box.cluster_id === placing.box.cluster_id && item !== placing);
+    return html`<div class="card placing">
+      <div>
+        ${placing
+          ? html`<b>Бокс ${placing.name}.</b>
+              <span class="muted">
+                Нажмите подсвеченное место «+ Сюда» рядом с боксом, к которому он пристыкован. Отмена — снова на бокс
+                или Esc.
+              </span>`
+          : html`<b>Расстановка.</b>
+              <span class="muted">Нажмите на бокс на схеме, чтобы переставить его, дать название или убрать со стенда.</span>`}
+      </div>
+      <div class="buttons">
+        ${placing
+          ? html`
+              <button @click=${() => this.renameBox(placing)}>${placing.box.alias ? "Изменить название" : "Дать название"}</button>
+              ${placing.box.cluster_id !== null
+                ? html`<button class="danger" @click=${() => this.unplaceBox(placing)}>Убрать со стенда</button>`
+                : nothing}
+              ${alone ? nothing : html`<button @click=${() => this.handlePlaceAtNewStand(placing)}>На новый стенд</button>`}
+              <button @click=${() => (this.placingBoxId = null)}>Отмена</button>
+            `
+          : nothing}
+        ${this.editingLayout
+          ? html`<button class="primary" @click=${this.finishLayout}>Готово</button>`
+          : nothing}
+      </div>
+    </div>`;
+  }
+
+  private readonly finishLayout = (): void => {
+    this.editingLayout = false;
+    this.placingBoxId = null;
+  };
+
+  private handlePlaceAtNewStand(placing: BoxOverview): void {
+    void this.run(async () => {
+      await this.commands.placeBox(placing.box.id, null);
+      this.placingBoxId = null;
+    });
+  }
+
 
   /** The state of the whole warehouse at a glance. */
   private renderSummary() {

@@ -6,6 +6,22 @@ export interface Box {
   online: boolean;
   created_at: string;
   status_changed_at: string | null;
+  /** Optional name the user gave the box. */
+  alias: string | null;
+  /** Stand the box is placed on, null while it is not placed. */
+  cluster_id: number | null;
+  /** Column on the stand from the left, from 0. */
+  grid_x: number | null;
+  /** Row on the stand from the bottom, from 0. */
+  grid_y: number | null;
+  /** Column letter and row number on the stand, e.g. B1. */
+  address: string | null;
+}
+
+/** Boxes joined side by side into one stand. */
+export interface Cluster {
+  id: number;
+  name: string;
 }
 
 export interface Component {

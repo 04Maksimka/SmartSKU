@@ -1,4 +1,4 @@
-import type { Calibration } from "../api/types";
+import type { Calibration, Cluster } from "../api/types";
 import type { LockerOverview } from "./dashboard-store";
 
 export interface CancelCalibrationRequest {
@@ -11,6 +11,13 @@ export interface ReleaseComponentRequest {
   label: string;
 }
 
+/** A grid cell of a stand chosen for the box being placed; no stand starts a new one. */
+export interface PlaceAtRequest {
+  clusterId: number | null;
+  x: number;
+  y: number;
+}
+
 /** Actions travel from the tiles and tables up to sku-app, which owns the CommandService and the dialogs. */
 export class DashboardEvents {
   static readonly CALIBRATE = "sku-calibrate";
@@ -18,6 +25,10 @@ export class DashboardEvents {
   static readonly SCALE_SETUP = "sku-scale-setup";
   static readonly CANCEL_CALIBRATION = "sku-cancel-calibration";
   static readonly RELEASE_COMPONENT = "sku-release-component";
+  static readonly SELECT_BOX = "sku-select-box";
+  static readonly PLACE_BOX = "sku-place-box";
+  static readonly PLACE_AT = "sku-place-at";
+  static readonly RENAME_CLUSTER = "sku-rename-cluster";
 
   calibrate(target: EventTarget, locker: LockerOverview | null): void {
     this.dispatch(target, DashboardEvents.CALIBRATE, locker);
@@ -39,6 +50,24 @@ export class DashboardEvents {
 
   releaseComponent(target: EventTarget, request: ReleaseComponentRequest): void {
     this.dispatch(target, DashboardEvents.RELEASE_COMPONENT, request);
+  }
+
+  /** Opens the full card of a box tapped on the stand map. */
+  selectBox(target: EventTarget, boxId: string): void {
+    this.dispatch(target, DashboardEvents.SELECT_BOX, boxId);
+  }
+
+  /** Starts choosing a place on a stand for the box (a new one or one being moved). */
+  placeBox(target: EventTarget, boxId: string): void {
+    this.dispatch(target, DashboardEvents.PLACE_BOX, boxId);
+  }
+
+  placeAt(target: EventTarget, request: PlaceAtRequest): void {
+    this.dispatch(target, DashboardEvents.PLACE_AT, request);
+  }
+
+  renameCluster(target: EventTarget, cluster: Cluster): void {
+    this.dispatch(target, DashboardEvents.RENAME_CLUSTER, cluster);
   }
 
   private dispatch(target: EventTarget, type: string, detail: unknown): void {

@@ -22,14 +22,49 @@ class UtcDateTime(TypeDecorator[datetime]):
         return value.replace(tzinfo=UTC) if value is not None else None
 
 
+class Cluster(Base):
+    """Boxes joined side by side into one stand; each box stands in a cell of the stand's grid."""
+
+    __tablename__ = "clusters"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=lambda: datetime.now(UTC))
+
+
 class Box(Base):
     __tablename__ = "boxes"
+
+    COLUMN_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True)
     hardware_id: Mapped[str] = mapped_column(String(64), unique=True)
     online: Mapped[bool] = mapped_column(default=False)
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=lambda: datetime.now(UTC))
     status_changed_at: Mapped[datetime | None] = mapped_column(UtcDateTime)
+    # Optional name the user gives the box, e.g. what it holds
+    alias: Mapped[str | None] = mapped_column(String(64))
+    # Place on the stand, seen from the front: column x from the left, row y from the bottom, both from 0.
+    # Null while the box is not placed yet
+    cluster_id: Mapped[int | None] = mapped_column(ForeignKey("clusters.id"))
+    grid_x: Mapped[int | None] = mapped_column(Integer)
+    grid_y: Mapped[int | None] = mapped_column(Integer)
+
+    @property
+    def address(self) -> str | None:
+        """How people find the box on its stand: column letter and row number, e.g. B1 (rows count bottom up,
+        so a box stacked on top does not renumber the ones below)."""
+        if self.cluster_id is None or self.grid_x is None or self.grid_y is None:
+            return None
+        letters = ""
+        column = self.grid_x
+        while True:
+            column, remainder = divmod(column, len(self.COLUMN_LETTERS))
+            letters = self.COLUMN_LETTERS[remainder] + letters
+            if column == 0:
+                break
+            column -= 1
+        return f"{letters}{self.grid_y + 1}"
 
 
 class BoxClaim(Base):

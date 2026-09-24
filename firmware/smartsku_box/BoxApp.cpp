@@ -15,14 +15,16 @@ BoxApp::BoxApp()
     statusLed_(AppConfig::STATUS_LED_PIN),
     setupButton_(AppConfig::SETUP_BUTTON_PIN, AppConfig::SETUP_HOLD_MS),
     loadCellBus_(AppConfig::HX711_SCK),
-    bleChannel_(AppConfig::BLE_NAME_PREFIX + hardwareId_.substring(hardwareId_.length() - 4)),
+    bleChannel_(AppConfig::BLE_NAME_PREFIX + hardwareId_.substring(0, 4)),
     setup_(hardwareId_, bleChannel_, wifi_, mqtt_, lockers_) {
   for (uint8_t id = 0; id < AppConfig::LOCKER_COUNT; ++id) {
     lockers_.push_back(std::make_unique<Locker>(id, AppConfig::LOCKERS[id], storage_, loadCellBus_));
   }
 }
 
-// Уникальный id платы из заводского MAC-адреса
+// Уникальный id платы из заводского MAC-адреса. getEfuseMac() хранит байты MAC в обратном порядке, поэтому в строке
+// общий для всех плат префикс производителя (OUI) стоит в конце, а байты, свои у каждой платы, — в начале:
+// по ним и различаются боксы в Bluetooth-имени (SmartSKU-XXXX)
 String BoxApp::readHardwareId() {
   char buffer[13];
   snprintf(buffer, sizeof(buffer), "%012llX", ESP.getEfuseMac());

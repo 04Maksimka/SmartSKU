@@ -45,6 +45,26 @@ export class CommandService {
     await this.store.refreshNow();
   }
 
+  async placeBox(boxId: string, clusterId: number | null, x = 0, y = 0): Promise<void> {
+    await this.api.placeBox(boxId, clusterId, x, y);
+    await this.store.refreshNow();
+  }
+
+  async unplaceBox(boxId: string): Promise<void> {
+    await this.api.unplaceBox(boxId);
+    await this.store.refreshNow();
+  }
+
+  async renameBox(boxId: string, alias: string | null): Promise<void> {
+    await this.api.renameBox(boxId, alias);
+    await this.store.refreshNow();
+  }
+
+  async renameCluster(clusterId: number, name: string): Promise<void> {
+    await this.api.renameCluster(clusterId, name);
+    await this.store.refreshNow();
+  }
+
   async releaseComponent(nfcId: string): Promise<void> {
     await this.api.releaseComponent(nfcId);
     await this.store.refreshNow();
